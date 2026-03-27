@@ -10,8 +10,8 @@ credentials:
       role: admin
     cdinternationalprojekt@gmail.com:
       name: Cristian Dragoi
-      password: $2b$12$IfZ3PoP75pfc/yuHLKhv6emCGs0iuXhBjFmWT.cswQf82KRar.b36
-      role: user
+      password: $2b$12$1cgU5k4OteicwA.3wnWO.uczexPgJfoLwNzdM3zOZul.SF/QjA2u6
+      role: admin
     cris:
       name: Cris
       password: $2b$12$rjcCiZVLb47BZE1pYpo5veppUzRIoS4PrPVNUkgJtP/XvZHl7kDda
