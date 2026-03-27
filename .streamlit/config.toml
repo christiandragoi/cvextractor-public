@@ -6,6 +6,9 @@ secondaryBackgroundColor = "#1e293b"
 textColor = "#e2e8f0"
 font = "sans serif"
 
+[auth]
+provider = "none"
+
 [server]
 maxUploadSize = 50
 enableStaticServing = true
