@@ -1,0 +1,18 @@
+cookie:
+  expiry_days: 30
+  key: cv_extractor_secret_key_2024
+  name: cv_extractor_auth
+credentials:
+  usernames:
+    admin:
+      name: Administrator
+      password: $2b$12$uJpFGyn1OEGR57KVDFh8VOVTGasAZCg4/bmTLaCjWkclQ1eCi3Ody
+      role: admin
+    cdinternationalprojekt@gmail.com:
+      name: Cristian Dragoi
+      password: $2b$12$IfZ3PoP75pfc/yuHLKhv6emCGs0iuXhBjFmWT.cswQf82KRar.b36
+      role: user
+    cris:
+      name: Cris
+      password: $2b$12$rjcCiZVLb47BZE1pYpo5veppUzRIoS4PrPVNUkgJtP/XvZHl7kDda
+      role: admin
