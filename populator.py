@@ -18,14 +18,27 @@ from docxtpl import DocxTemplate
 def _fix_jinja_xml(xml: str) -> str:
     """
     PRE-PROCESSOR: Runs BEFORE docxtpl's patch_xml().
-    Removes Word 'shrapnel' tags so docxtpl can read Jinja tags cleanly.
+    Surgically repairs 'shredded' Jinja2 tags by merging text fragments
+    while preserving XML integrity.
     """
-    # Remove self-closing noise elements that Word inserts between text runs.
+    # 1. Strip known noise tags that split runs (spellcheck, grammar, and language)
+    # These are safe to remove as they don't impact document structure.
     xml = re.sub(r'<w:proofErr[^/]*/>', '', xml)
     xml = re.sub(r'<w:noProof/>', '', xml)
-    # Fix smart quotes
+    xml = re.sub(r'<w:lang[^/]*/>', '', xml)
+
+    # 2. Safe Run Merger
+    # Merge text runs that are now truly adjacent after noise removal.
+    # We only merge if they are in the same paragraph/cell (safe).
+    xml = xml.replace('</w:t></w:r><w:r><w:t>', '')
+    xml = xml.replace('</w:t></w:r><w:r><w:t xml:space="preserve">', '')
+    xml = xml.replace('</w:t><w:t>', '')
+    xml = xml.replace('</w:t><w:t xml:space="preserve">', '')
+
+    # 3. Fix smart/curly quotes
     xml = xml.replace('\u201c', '"').replace('\u201d', '"').replace('\u201e', '"')
     xml = xml.replace('\u2018', "'").replace('\u2019', "'").replace('\u201a', "'")
+    
     return xml
 
 
@@ -109,14 +122,25 @@ def _safe(v, fallback=""):
 
 
 def _fmt_edu(lst):
-    return [
-        {
-            "years":       _safe(e.get("years", e.get("jahre")), ""),
-            "institution": _safe(e.get("institution", e.get("einrichtung")), ""),
-            "field":       _safe(e.get("field", e.get("abschluss", e.get("kurs"))), ""),
-        }
-        for e in (lst or [])
-    ]
+    """Convert ANY education/training entry to canonical {years, institution, field} format.
+    Handles German keys (jahre, einrichtung, abschluss), Weiterbildung (anbieter, kurs),
+    and English keys (years, institution, field).
+    """
+    result = []
+    for e in (lst or []):
+        if not isinstance(e, dict):
+            continue
+        years = _safe(e.get("years") or e.get("jahre"), "")
+        institution = _safe(
+            e.get("institution") or e.get("einrichtung") or e.get("anbieter"), ""
+        )
+        field = _safe(
+            e.get("field") or e.get("abschluss") or e.get("kurs") or e.get("bezeichnung"), ""
+        )
+        # Only skip completely empty entries
+        if years or institution or field:
+            result.append({"years": years, "institution": institution, "field": field})
+    return result
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -190,33 +214,68 @@ def populate_template(template_path: str, output_path: str, data: dict) -> str:
         sync_jobs.append(item)
 
     # 3. Education Synchronization
-    # AI often returns a list for "bildung" and a list for "weiterbildung".
-    # UI buffer returns a dict with "higher_education" and "further_training" keys.
-    edu_input = data.get("education", {})
-    bildung_raw = data.get("bildung", [])
-    training_raw = data.get("weiterbildung", [])
+    # The AI ALWAYS returns German keys: bildung (list) and weiterbildung (list).
+    # Each bildung entry has: jahre, einrichtung, abschluss
+    # Each weiterbildung entry has: jahre, anbieter, kurs
+    # We must handle ALL of these plus English fallbacks.
 
-    if isinstance(edu_input, dict):
-        sync_edu = _fmt_edu(edu_input.get("higher_education", bildung_raw))
-        sync_training = _fmt_edu(edu_input.get("further_training", training_raw))
-    else:
-        # Fallback if somehow it's not a dict
-        sync_edu = _fmt_edu(bildung_raw)
-        sync_training = _fmt_edu(training_raw)
+    # Collect from every possible location the data could be stored
+    bildung_raw = (
+        data.get("bildung")
+        or data.get("education", {}).get("higher_education") if isinstance(data.get("education"), dict) else None
+        or (data.get("education") if isinstance(data.get("education"), list) else None)
+        or []
+    )
+    training_raw = (
+        data.get("weiterbildung")
+        or data.get("education", {}).get("further_training") if isinstance(data.get("education"), dict) else None
+        or []
+    )
 
-    # Dual-language list for loops
-    # b.jahre / b.years, b.einrichtung / b.institution, b.abschluss / b.field
+    sync_edu = _fmt_edu(bildung_raw)
+    sync_training = _fmt_edu(training_raw)
+
+    # SAFETY NET: If AI returned empty bildung, inject a placeholder so the
+    # education section is never silently removed from the Word document.
+    # The user can correct it using the Data Inspector in the Review Station.
+    if not sync_edu:
+        sync_edu = [{
+            "years": "—",
+            "institution": "Berufsschule (bitte ergänzen)",
+            "field": "Ausbildung (bitte ergänzen)",
+        }]
+
+    # Debug: write extracted counts to a temp file for inspection
+    import json as _json, tempfile as _tmp, os as _os
+    _dbg = _os.path.join(_tmp.gettempdir(), "cvextractor_last_data.json")
+    try:
+        with open(_dbg, "w", encoding="utf-8") as _f:
+            _json.dump({
+                "bildung_raw": bildung_raw,
+                "training_raw": training_raw,
+                "sync_edu_count": len(sync_edu),
+                "sync_training_count": len(sync_training),
+                "all_keys": list(data.keys()),
+            }, _f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+    # Dual-language enrichment for template loops
+    # Ensures BOTH German and English keys exist on every loop item
     def dual_edu(lst):
         res = []
         for e in lst:
             res.append({
-                "years":       _safe(e.get("years"), ""), 
+                # English keys (used in template: {{ he.years }}, {{ he.institution }}, {{ he.field }})
+                "years":       _safe(e.get("years"), ""),
+                "institution": _safe(e.get("institution"), ""),
+                "field":       _safe(e.get("field"), ""),
+                # German mirrors
                 "jahre":       _safe(e.get("years"), ""),
-                "institution": _safe(e.get("institution"), ""), 
                 "einrichtung": _safe(e.get("institution"), ""),
-                "field":       _safe(e.get("field"), ""), 
-                "abschluss":   _safe(e.get("field"), ""), 
-                "kurs":        _safe(e.get("field"), "")
+                "abschluss":   _safe(e.get("field"), ""),
+                "kurs":        _safe(e.get("field"), ""),
+                "anbieter":    _safe(e.get("institution"), ""),
             })
         return res
 

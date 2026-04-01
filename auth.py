@@ -138,6 +138,36 @@ def get_oauth_verifiers() -> dict:
     return {}
 
 
+def _get_redirect_uri() -> str:
+    """
+    Detect the correct redirect URI for Google OAuth.
+    Tries to read the actual host from Streamlit's request headers first.
+    Falls back to env vars, saved settings, then the hardcoded Streamlit Cloud URL.
+    """
+    # Try to read the real host from Streamlit's context headers (Streamlit >= 1.37)
+    try:
+        headers = st.context.headers  # type: ignore[attr-defined]
+        host = headers.get("host", "") if hasattr(headers, "get") else ""
+        if host and "localhost" not in host and "127.0.0.1" not in host:
+            return f"https://{host}"
+    except (AttributeError, Exception):
+        pass
+
+    # Fallback: env var APP_URL
+    raw_url = os.environ.get("APP_URL", "") or _get_secret("APP_URL")
+    if raw_url and "localhost" not in raw_url:
+        return raw_url.rstrip("/")
+
+    # Fallback: saved settings app_url
+    settings = _load_settings()
+    saved = settings.get("app_url", "")
+    if saved and "localhost" not in saved:
+        return saved.rstrip("/")
+
+    # Local dev
+    return "http://localhost:8501"
+
+
 def get_google_oauth_url() -> tuple[str, str, str] | tuple[None, None, None]:
     """Build a Google OAuth URL with manual PKCE."""
     settings = _load_settings()
@@ -159,30 +189,9 @@ def get_google_oauth_url() -> tuple[str, str, str] | tuple[None, None, None]:
     digest = hashlib.sha256(code_verifier.encode('utf-8')).digest()
     code_challenge = base64.urlsafe_b64encode(digest).rstrip(b'=').decode('utf-8')
 
-    # Determine redirect URI dynamically.
-    # Priority: Streamlit Cloud hostname > env var APP_URL > saved settings > default
-    try:
-        import streamlit as st
-        # When running on Streamlit Cloud, server.headless is True and we can detect the host
-        headers = st.context.headers
-        host = headers.get("host", "") if hasattr(headers, "get") else ""
-        if host and "localhost" not in host and "127.0.0.1" not in host:
-            # We're on a real server - build the URL from the host
-            app_url = f"https://{host}"
-        else:
-            raise Exception("localhost")
-    except Exception:
-        # Fallback chain: env > settings > default
-        try:
-            raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
-        except Exception:
-            raw_url = ""
-        settings = _load_settings()
-        default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
-        app_url = (raw_url or settings.get("app_url", "") or default_url).rstrip("/")
-        # If settings has localhost but we detect we're NOT localhost, use default
-        if "localhost" in app_url:
-            app_url = "http://localhost:8501"  # Keep localhost for local dev
+    # Determine the redirect URI dynamically based on where the app is actually running.
+    # Works for both localhost dev and Streamlit Cloud production.
+    app_url = _get_redirect_uri()
 
     params = {
         "client_id": client_id,
@@ -211,24 +220,8 @@ def exchange_google_code(code: str, code_verifier: str) -> dict | None:
     if not client_id or not client_secret:
         return None
 
-    # Determine redirect URI dynamically (same logic as get_google_oauth_url)
-    try:
-        import streamlit as st
-        headers = st.context.headers
-        host = headers.get("host", "") if hasattr(headers, "get") else ""
-        if host and "localhost" not in host and "127.0.0.1" not in host:
-            app_url = f"https://{host}"
-        else:
-            raise Exception("localhost")
-    except Exception:
-        try:
-            raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
-        except Exception:
-            raw_url = ""
-        default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
-        app_url = (raw_url or settings.get("app_url", "") or default_url).rstrip("/")
-        if "localhost" in app_url:
-            app_url = "http://localhost:8501"
+    # Use the same dynamic redirect URI logic
+    app_url = _get_redirect_uri()
 
     data = {
         "code": code,
