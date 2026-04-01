@@ -219,18 +219,16 @@ def populate_template(template_path: str, output_path: str, data: dict) -> str:
     # Each weiterbildung entry has: jahre, anbieter, kurs
     # We must handle ALL of these plus English fallbacks.
 
-    # Collect from every possible location the data could be stored
-    bildung_raw = (
-        data.get("bildung")
-        or data.get("education", {}).get("higher_education") if isinstance(data.get("education"), dict) else None
-        or (data.get("education") if isinstance(data.get("education"), list) else None)
-        or []
-    )
-    training_raw = (
-        data.get("weiterbildung")
-        or data.get("education", {}).get("further_training") if isinstance(data.get("education"), dict) else None
-        or []
-    )
+    # Collect bildung from wherever it exists in the data
+    bildung_raw = data.get("bildung") or []
+    if not bildung_raw and isinstance(data.get("education"), dict):
+        bildung_raw = data["education"].get("higher_education") or []
+    if not bildung_raw and isinstance(data.get("education"), list):
+        bildung_raw = data["education"]
+
+    training_raw = data.get("weiterbildung") or []
+    if not training_raw and isinstance(data.get("education"), dict):
+        training_raw = data["education"].get("further_training") or []
 
     sync_edu = _fmt_edu(bildung_raw)
     sync_training = _fmt_edu(training_raw)
