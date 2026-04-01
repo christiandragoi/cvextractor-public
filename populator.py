@@ -19,21 +19,22 @@ def _fix_jinja_xml(xml: str) -> str:
     """
     Fix Jinja2 template issues in the XML string AFTER docxtpl's own
     patch_xml() has already cleaned up run fragmentation.
-    
-    This runs between patch_xml() and render_xml_part() in the pipeline.
     """
-    # 1. Fix smart/curly/smart-quotes everywhere in the XML (especially inside tags)
+    # 1. Aggressive Noise Filter: remove Word spellcheck/grammar junk specifically
+    # inside text runs to prevent them from splitting our Jinja tags.
+    # We remove <w:proofErr/>, <w:noProof/>, and language settings that 
+    # Word often injects mid-tag.
+    xml = re.sub(r'<w:proofErr\s+w:type="(?:spell|gram)(?:Start|End)"/>', '', xml)
+    xml = re.sub(r'<w:noProof/>', '', xml)
+    
+    # 2. Fix smart/curly/smart-quotes everywhere in the XML
     xml = xml.replace('\u201c', '"').replace('\u201d', '"').replace('\u201e', '"')
     xml = xml.replace('\u2018', "'").replace('\u2019', "'").replace('\u201a', "'")
     
-    # 2. Smart nested {% for %} handler.
-    #    Docxtpl's {%tr for} rewriting often orphans nested loops.
-    #    We flatten them to |join ONLY if they are simple property accesses.
-    #    If the body contains a newline or complex formatting, we try to preserve it
-    #    by using |join("\n") to maintain verticality whilst strictly avoiding orphaning.
+    # 3. Smart nested {% for %} handler.
     innermost_for_re = re.compile(
-        r'\{%\s*for\s+(\w+)\s+in\s+([\w.]+)\s*%\}' # {% for d in job.duties %}
-        r'((?:(?!\{%\s*for\s).)*?)'                 # body (m.group(3))
+        r'\{%\s*for\s+(\w+)\s+in\s+([\w.]+)\s*%\}'
+        r'((?:(?!\{%\s*for\s).)*?)'
         r'\{%\s*endfor\s*%\}',
         re.DOTALL
     )
@@ -42,42 +43,35 @@ def _fix_jinja_xml(xml: str) -> str:
         loop_var = m.group(1)
         expr     = m.group(2)
         body     = m.group(3).strip()
-        
-        # If it's a nested access (e.g. job.duties)
         if '.' in expr:
-            # If the body is just the loop variable {{ d }}, flatten it.
-            # We use newline join if the user had a newline in their template.
             is_vertical = "\n" in m.group(3) or "<w:br" in m.group(3)
             sep = r'\n' if is_vertical else ', '
-            
-            # Check if body is just the variable output
-            # Simple check: does it look like {{ var }}?
             if re.fullmatch(r'\{\{\s*' + re.escape(loop_var) + r'\s*\}\}', body):
                 return '{{ ' + expr + '|join("' + sep + '") }}'
-
-        # Otherwise, keep the loop as is (docxtpl will try its best)
         return m.group(0)
 
-    # Apply repeatedly to handle multiple nestings
     prev = None
     while prev != xml:
         prev = xml
         xml = innermost_for_re.sub(_smart_flatten, xml)
     
-    # 3. Re-count: if there are still more endfor than for, remove extras from the end
-    for_count = len(re.findall(r'\{%\s*for\s', xml))
-    endfor_count = len(re.findall(r'\{%\s*endfor\s*%\}', xml))
+    # 4. Balanced Tag Counter (now with robust awareness of table tags)
+    # We strip XML internals for the search to find tags even if they're split.
+    searchable_xml = re.sub(r'<[^>]+>', '', xml)
+    for_count = len(re.findall(r'\{%\s*(?:tr\s+|tc\s+|p\s+)?for\s', searchable_xml))
+    endfor_count = len(re.findall(r'\{%\s*endfor\s*%\}', searchable_xml))
+    
     while endfor_count > for_count:
-        # Remove the last {% endfor %}
-        xml = xml[:xml.rfind('{% endfor %}')] + xml[xml.rfind('{% endfor %}') + len('{% endfor %}'):]
+        idx = xml.rfind('{% endfor %}')
+        if idx == -1: break
+        xml = xml[:idx] + xml[idx + len('{% endfor %}'):]
         endfor_count -= 1
     
-    # 4. Count {% if %} vs {% endif %} and auto-append missing ones
-    if_count = len(re.findall(r'\{%\s*if\s', xml))
-    endif_count = len(re.findall(r'\{%\s*endif\s*%\}', xml))
+    # 5. Balancing {% if %} vs {% endif %}
+    if_count = len(re.findall(r'\{%\s*if\s', searchable_xml))
+    endif_count = len(re.findall(r'\{%\s*endif\s*%\}', searchable_xml))
     if if_count > endif_count:
-        missing = if_count - endif_count
-        for _ in range(missing):
+        for _ in range(if_count - endif_count):
             xml = xml.replace('</w:body>', '{% endif %}</w:body>')
     
     return xml

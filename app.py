@@ -1068,32 +1068,33 @@ if active_tab == "📜 Lebenslauf":
         elif ll_tpl_source == "Upload now":
             ll_tpl_file = st.file_uploader("Vorlage (.docx) hochladen", type=["docx"], key="ll_tpl_file")
 
-        # ── 🧰 TEMPLATE DIAGNOSTICS ──────────────────────────────
-        with st.expander("🧰 Template Diagnostics (Check Format)", expanded=False):
-            st.caption("Verifiziere, ob deine Word-Vorlage korrekt formatiert ist und wie viele Tags gelesen werden.")
-            
-            diag_path = None
-            if ll_tpl_source == "Saved templates" and ll_tpl_path:
-                diag_path = ll_tpl_path
-            elif ll_tpl_source == "Upload now" and ll_tpl_file:
-                # We need to temporarily save the file to diagnose it securely
-                import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-                    tmp.write(ll_tpl_file.getvalue())
-                    diag_path = tmp.name
+        # ── 🛠️ TEMPLATE DIAGNOSTICS (Moved out of expander for visibility) ──
+        st.markdown('<div class="bento-card">', unsafe_allow_html=True)
+        st.markdown('<div class="bento-title">🛠️ Vorlagen-Check</div>', unsafe_allow_html=True)
+        st.caption("Verifiziere deine Word-Vorlage auf Korrektheit, bevor du generierst.")
+        
+        diag_path = None
+        if ll_tpl_source == "Saved templates" and ll_tpl_path:
+            diag_path = ll_tpl_path
+        elif ll_tpl_source == "Upload now" and ll_tpl_file:
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+                tmp.write(ll_tpl_file.getvalue())
+                diag_path = tmp.name
 
-            if st.button("🧪 Check Template Format", key="ll_btn_diag", use_container_width=True, disabled=not diag_path):
-                with st.spinner("Scanne nach Jinja-Tags..."):
-                    res = diagnose_template(diag_path)
-                    if res["error"]:
-                        st.error(f"❌ Syntaxfehler gefunden!\n\n**Genaue Ursache:**\n```\n{res['error']}\n```")
-                        st.info("💡 **TIPP:** Öffne die Word-Vorlage. Prüfe ob alle `{% for %}` auch ein `{% endfor %}` haben, und ob Klammern versehentlich getrennt wurden.")
-                    elif res["count"] == 0:
-                        st.warning("⚠️ **0 Tags gefunden!**")
-                        st.caption("Das System denkt, deine Vorlage ist ein statisches Word-Dokument. Wahrscheinlich wurden die `{ {` Klammern von Word zerrissen. Tippe die Variablen manuell neu ein, ohne Formatierungsänderungen.")
-                    else:
-                        st.success(f"✅ **{res['count']} Variablen** erfolgreich erkannt!")
-                        st.code(", ".join(res["tags"]))
+        if st.button("🔍 Check Template Format", key="ll_btn_diag_visible", use_container_width=True, disabled=not diag_path):
+            with st.spinner("Scanne nach Jinja-Tags..."):
+                res = diagnose_template(diag_path)
+                if res["error"]:
+                    st.error(f"❌ Syntaxfehler gefunden!\n\n**Genaue Ursache:**\n```\n{res['error']}\n```")
+                    st.info("💡 **TIPP:** Öffne die Word-Vorlage. Prüfe ob alle `{% for %}` auch ein `{% endfor %}` haben.")
+                elif res["count"] == 0:
+                    st.warning("⚠️ **0 Tags gefunden!**")
+                    st.caption("Das System denkt, deine Vorlage ist ein statisches Word-Dokument. Wahrscheinlich wurden die `{ {` Klammern von Word zerrissen.")
+                else:
+                    st.success(f"✅ **{res['count']} Variablen** erfolgreich erkannt!")
+                    st.code(", ".join(res["tags"]), language="text")
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.divider()
         ll_run = st.button(
@@ -1170,6 +1171,7 @@ if active_tab == "📜 Lebenslauf":
                     st.session_state.ll_extract_buffer = {
                         "data": ll_data,
                         "tpl_path": current_tpl_path,
+                        "tpl_name": ll_tpl_file.name if ll_tpl_file else (sel if ll_tpl_source == "Saved templates" else "Built-in Styling"),
                         "job_role": ll_job_role,
                         "provider": ll_provider,
                         "model": ll_model,
@@ -1233,7 +1235,8 @@ if active_tab == "📜 Lebenslauf":
                 st.markdown('<div class="bento-card">', unsafe_allow_html=True)
                 st.markdown('<div class="bento-title">🚀 Output Factory</div>', unsafe_allow_html=True)
                 
-                st.info(f"AI: **{ll_buf['provider']}**\nMode: `{'Custom Template' if ll_buf['tpl_path'] else 'Built-in'}`")
+                st.info(f"AI: **{ll_buf['provider']}**")
+                st.success(f"📌 **Active Template:** `{ll_buf.get('tpl_name', 'Default')}`")
 
                 if ll_buf["status"] == "ready":
                     if st.button("✨ Approve & Generate Document", type="primary", use_container_width=True, key="ll_btn_approve"):
