@@ -265,11 +265,19 @@ def transcribe_audio(audio_bytes: bytes, provider: str, api_key: str) -> str:
     """
     if not audio_bytes:
         return ""
+    
+    if not api_key or not str(api_key).strip():
+        raise ValueError(f"No API key provided for {provider} STT. Please add it in ⚙️ Settings.")
 
     if provider == "OpenAI":
         from openai import OpenAI
         import tempfile
-        client = OpenAI(api_key=api_key)
+        # IMPORTANT: Always use api.openai.com directly — ignore OPENAI_BASE_URL env var
+        # which might be set to OpenRouter or other proxy that doesn't support Whisper
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.openai.com/v1",  # force direct — never use OPENAI_BASE_URL
+        )
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
@@ -290,24 +298,17 @@ def transcribe_audio(audio_bytes: bytes, provider: str, api_key: str) -> str:
             "Authorization": f"Token {api_key}",
             "Content-Type": "audio/wav"
         }
-        resp = requests.post(url, headers=headers, data=audio_bytes)
+        resp = requests.post(url, headers=headers, data=audio_bytes, timeout=30)
         resp.raise_for_status()
         return resp.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
 
     elif provider == "Eleven Labs":
         import requests
-        # Eleven Labs Speech-to-Text (Dublin) endpoint
         url = "https://api.elevenlabs.io/v1/speech-to-text"
-        headers = {
-            "xi-api-key": api_key
-        }
-        files = {
-            "file": ("audio.wav", audio_bytes, "audio/wav")
-        }
-        data = {
-            "model_id": "scribble-v1" # or latest STT model
-        }
-        resp = requests.post(url, headers=headers, files=files, data=data)
+        headers = {"xi-api-key": api_key}
+        files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+        data = {"model_id": "scribe_v1"}  # current ElevenLabs STT model
+        resp = requests.post(url, headers=headers, files=files, data=data, timeout=30)
         resp.raise_for_status()
         return resp.json()["text"]
 
