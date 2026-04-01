@@ -1153,24 +1153,22 @@ if active_tab == "📜 Lebenslauf":
                     text_content = _re.sub(r'<[^>]+>', '', xml_content)
                     text_content = _re.sub(r'\s+', ' ', text_content).strip()
                     
-                    review_prompt = f"""Du bist ein Experte für docxtpl / Jinja2 Word-Templates.
-Analysiere folgende Word-Vorlage und finde potenzielle Probleme:
-
-GEFUNDENE JINJA-TAGS ({len(jinja_tags)} Stück):
-{chr(10).join(jinja_tags[:50])}
-
-VOLLTEXT DER VORLAGE (bereinigt):
-{text_content[:3000]}
-
-Prüfe auf:
-1. ❌ Fehlende {% endif %} oder {% endfor %} (Struktur-Imbalancen)
-2. ❌ Unbekannte Variablen die im Standard-Schema fehlen
-3. ❌ Verschachtelte Loops die Probleme verursachen könnten
-4. ✅ Korrekt verwendete Variablen
-5. 💡 Verbesserungsvorschläge
-
-Antworte mit einer klaren, kurzen Analyse auf Deutsch. Verwende Markdown-Formatierung.
-Beginne mit einer Bewertung: ✅ OK / ⚠️ WARNUNG / ❌ FEHLER"""
+                    review_prompt = (
+                        "Du bist ein Experte für docxtpl / Jinja2 Word-Templates.\n"
+                        "Analysiere folgende Word-Vorlage und finde potenzielle Probleme:\n\n"
+                        f"GEFUNDENE JINJA-TAGS ({len(jinja_tags)} Stück):\n"
+                        + chr(10).join(jinja_tags[:50]) + "\n\n"
+                        f"VOLLTEXT DER VORLAGE (bereinigt):\n"
+                        + text_content[:3000] + "\n\n"
+                        "Prüfe auf:\n"
+                        "1. Fehlende endif oder endfor (Struktur-Imbalancen)\n"
+                        "2. Unbekannte Variablen die im Standard-Schema fehlen\n"
+                        "3. Verschachtelte Loops die Probleme verursachen könnten\n"
+                        "4. Korrekt verwendete Variablen\n"
+                        "5. Verbesserungsvorschläge\n\n"
+                        "Antworte mit einer klaren, kurzen Analyse auf Deutsch. Verwende Markdown-Formatierung.\n"
+                        "Beginne mit einer Bewertung: OK / WARNUNG / FEHLER"
+                    )
 
                     from chat_assistant import send_chat_message
                     _review_provider = "Anthropic" if cfg("anthropic_api_key") else "OpenAI"
