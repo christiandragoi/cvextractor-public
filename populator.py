@@ -17,64 +17,72 @@ from docxtpl import DocxTemplate
 
 def _fix_jinja_xml(xml: str) -> str:
     """
-    Fix Jinja2 template issues in the XML string AFTER docxtpl's own
-    patch_xml() has already cleaned up run fragmentation.
+    PRE-PROCESSOR: Runs BEFORE docxtpl's patch_xml().
+    Removes Word 'shrapnel' tags so docxtpl can read Jinja tags cleanly.
     """
-    # 1. Aggressive Noise Filter: remove Word spellcheck/grammar junk specifically
-    # inside text runs to prevent them from splitting our Jinja tags.
-    # We remove <w:proofErr/>, <w:noProof/>, and language settings that 
-    # Word often injects mid-tag.
-    xml = re.sub(r'<w:proofErr\s+w:type="(?:spell|gram)(?:Start|End)"/>', '', xml)
+    # Remove self-closing noise elements that Word inserts between text runs.
+    xml = re.sub(r'<w:proofErr[^/]*/>', '', xml)
     xml = re.sub(r'<w:noProof/>', '', xml)
-    
-    # 2. Fix smart/curly/smart-quotes everywhere in the XML
+    # Fix smart quotes
     xml = xml.replace('\u201c', '"').replace('\u201d', '"').replace('\u201e', '"')
     xml = xml.replace('\u2018', "'").replace('\u2019', "'").replace('\u201a', "'")
-    
-    # 3. Smart nested {% for %} handler.
-    innermost_for_re = re.compile(
-        r'\{%\s*for\s+(\w+)\s+in\s+([\w.]+)\s*%\}'
-        r'((?:(?!\{%\s*for\s).)*?)'
-        r'\{%\s*endfor\s*%\}',
-        re.DOTALL
-    )
-    
-    def _smart_flatten(m):
-        loop_var = m.group(1)
-        expr     = m.group(2)
-        body     = m.group(3).strip()
-        if '.' in expr:
-            is_vertical = "\n" in m.group(3) or "<w:br" in m.group(3)
-            sep = r'\n' if is_vertical else ', '
-            if re.fullmatch(r'\{\{\s*' + re.escape(loop_var) + r'\s*\}\}', body):
-                return '{{ ' + expr + '|join("' + sep + '") }}'
-        return m.group(0)
+    return xml
 
-    prev = None
-    while prev != xml:
-        prev = xml
-        xml = innermost_for_re.sub(_smart_flatten, xml)
+
+def _balance_endfor(xml: str) -> str:
+    """
+    POST-PROCESSOR: Runs AFTER docxtpl's patch_xml().
     
-    # 4. Balanced Tag Counter (now with robust awareness of table tags)
-    # We strip XML internals for the search to find tags even if they're split.
-    searchable_xml = re.sub(r'<[^>]+>', '', xml)
-    for_count = len(re.findall(r'\{%\s*(?:tr\s+|tc\s+|p\s+)?for\s', searchable_xml))
-    endfor_count = len(re.findall(r'\{%\s*endfor\s*%\}', searchable_xml))
+    Finds and removes orphaned {% endfor %} tags — ones that appear before
+    any for loop is open, which would crash Jinja with 'unknown tag endfor'.
+    Also balances endif tags.
+    """
+    # We need to find the FIRST orphaned endfor, not just count them.
+    # An orphaned endfor is one where the nesting depth goes below 0.
     
-    while endfor_count > for_count:
-        idx = xml.rfind('{% endfor %}')
-        if idx == -1: break
-        xml = xml[:idx] + xml[idx + len('{% endfor %}'):]
-        endfor_count -= 1
+    # Extract all Jinja tags WITH their positions in the XML
+    tag_positions = []
+    text_only = re.sub(r'<[^>]+>', '', xml)
     
-    # 5. Balancing {% if %} vs {% endif %}
-    if_count = len(re.findall(r'\{%\s*if\s', searchable_xml))
-    endif_count = len(re.findall(r'\{%\s*endif\s*%\}', searchable_xml))
+    # Simulate Jinja parsing to find the orphan
+    depth = 0
+    orphan_tags = []  # tags to remove from the text_only representation
+    
+    for m in re.finditer(r'\{%-?\s*(?:for|endfor|if|endif|else)[^%]*%\}', text_only):
+        tag = m.group(0)
+        if re.search(r'\{%-?\s*(?:for)\s', tag):
+            depth += 1
+        elif re.search(r'\{%-?\s*endfor', tag):
+            if depth <= 0:
+                # This is an orphaned endfor — record it for removal
+                orphan_tags.append(tag)
+            else:
+                depth -= 1
+    
+    # Remove each orphaned endfor from the actual XML (first occurrence of each)
+    for tag in orphan_tags:
+        idx = xml.find(tag)
+        if idx != -1:
+            xml = xml[:idx] + xml[idx + len(tag):]
+
+    # Balance {% if %} vs {% endif %}
+    text_only = re.sub(r'<[^>]+>', '', xml)
+    if_count    = len(re.findall(r'\{%-?\s*if\s', text_only))
+    endif_count = len(re.findall(r'\{%-?\s*endif\s*-?%\}', text_only))
     if if_count > endif_count:
         for _ in range(if_count - endif_count):
             xml = xml.replace('</w:body>', '{% endif %}</w:body>')
     
+    # Also handle missing endfor (if for > endfor after removing orphans)
+    text_only = re.sub(r'<[^>]+>', '', xml)
+    for_count    = len(re.findall(r'\{%-?\s*for\s', text_only))
+    endfor_count = len(re.findall(r'\{%-?\s*endfor\s*-?%\}', text_only))
+    if for_count > endfor_count:
+        for _ in range(for_count - endfor_count):
+            xml = xml.replace('</w:body>', '{% endfor %}</w:body>')
+    
     return xml
+
 
 
 # ── Job-type mapping ──────────────────────────────────────────────────────────
@@ -120,14 +128,18 @@ def populate_template(template_path: str, output_path: str, data: dict) -> str:
     doc = DocxTemplate(template_path)
     doc.init_docx()
 
-    # Monkey-patch build_xml to inject our fixes between patch_xml and render_xml_part
-    _original_build_xml = doc.build_xml
-
+    # Monkey-patch build_xml to inject our pre-fix BEFORE docxtpl's patch_xml
+    # This is the correct injection point: we need to clean Word's shrapnel tags
+    # so that docxtpl's patch_xml can correctly identify and transform {%tr for %} etc.
     def _patched_build_xml(context, jinja_env=None):
         xml = doc.get_xml()
-        xml = doc.patch_xml(xml)
-        # === OUR FIX: runs AFTER docxtpl's own cleanup ===
+        # Phase 1: Strip Word noise BEFORE docxtpl's patch_xml
         xml = _fix_jinja_xml(xml)
+        # Phase 2: Let docxtpl do its table-row expansion
+        xml = doc.patch_xml(xml)
+        # Phase 3: Balance any stray endfor tags docxtpl introduced
+        xml = _balance_endfor(xml)
+        # Phase 4: Render the clean XML
         xml = doc.render_xml_part(xml, doc.docx._part, context, jinja_env)
         return xml
 
