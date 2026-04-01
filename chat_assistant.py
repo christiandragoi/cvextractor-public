@@ -50,8 +50,13 @@ def chat_gemini(messages: list[dict], model: str, api_key: str) -> str:
 
 def chat_anthropic(messages: list[dict], model: str, api_key: str) -> str:
     """Send chat messages via Anthropic API."""
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
+    import anthropic, httpx
+
+    # Use trust_env=False to completely bypass system HTTP_PROXY / HTTPS_PROXY env vars
+    # which can cause spurious 'APIConnectionError' when a local proxy (e.g. port 8080) is set
+    transport = httpx.HTTPTransport(proxy=None)
+    http_client = httpx.Client(transport=transport, trust_env=False, timeout=httpx.Timeout(120.0))
+    client = anthropic.Anthropic(api_key=api_key, http_client=http_client)
 
     # Separate system message
     system_msg = ""
@@ -62,13 +67,24 @@ def chat_anthropic(messages: list[dict], model: str, api_key: str) -> str:
         else:
             chat_msgs.append({"role": msg["role"], "content": msg["content"]})
 
-    resp = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        system=system_msg.strip() or "You are a helpful assistant for CV processing.",
-        messages=chat_msgs,
-    )
-    return resp.content[0].text or ""
+    try:
+        resp = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            system=system_msg.strip() or "You are a helpful assistant for CV processing.",
+            messages=chat_msgs,
+        )
+        return resp.content[0].text or ""
+    except anthropic.APIStatusError as e:
+        # Give a clear, actionable error for billing/credit issues
+        err_body = str(e).lower()
+        if "credit" in err_body or "billing" in err_body or "upgrade" in err_body or "purchase" in err_body:
+            raise RuntimeError(
+                "❌ Anthropic account has no credits. "
+                "Please add credits at https://console.anthropic.com/settings/billing — "
+                "or switch to a different AI provider (OpenAI, Gemini, etc.)."
+            ) from e
+        raise
 
 
 def chat_mistral(messages: list[dict], model: str, api_key: str) -> str:
