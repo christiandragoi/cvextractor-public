@@ -8,7 +8,7 @@ from pathlib import Path
 
 from streamlit_mic_recorder import mic_recorder
 from extractor import get_cv_data, get_identity_data, get_lebenslauf_data
-from populator import populate_template
+from populator import populate_template, diagnose_template
 from lebenslauf_builder import build_lebenslauf_docx
 from auth import render_login_page, render_logout_button, render_user_management
 from candidates_manager import (
@@ -1067,6 +1067,33 @@ if active_tab == "📜 Lebenslauf":
                 st.info("No saved templates yet.")
         elif ll_tpl_source == "Upload now":
             ll_tpl_file = st.file_uploader("Vorlage (.docx) hochladen", type=["docx"], key="ll_tpl_file")
+
+        # ── 🧰 TEMPLATE DIAGNOSTICS ──────────────────────────────
+        with st.expander("🧰 Template Diagnostics (Check Format)", expanded=False):
+            st.caption("Verifiziere, ob deine Word-Vorlage korrekt formatiert ist und wie viele Tags gelesen werden.")
+            
+            diag_path = None
+            if ll_tpl_source == "Saved templates" and ll_tpl_path:
+                diag_path = ll_tpl_path
+            elif ll_tpl_source == "Upload now" and ll_tpl_file:
+                # We need to temporarily save the file to diagnose it securely
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+                    tmp.write(ll_tpl_file.getvalue())
+                    diag_path = tmp.name
+
+            if st.button("🧪 Check Template Format", key="ll_btn_diag", use_container_width=True, disabled=not diag_path):
+                with st.spinner("Scanne nach Jinja-Tags..."):
+                    res = diagnose_template(diag_path)
+                    if res["error"]:
+                        st.error(f"❌ Syntaxfehler gefunden!\n\n**Genaue Ursache:**\n```\n{res['error']}\n```")
+                        st.info("💡 **TIPP:** Öffne die Word-Vorlage. Prüfe ob alle `{% for %}` auch ein `{% endfor %}` haben, und ob Klammern versehentlich getrennt wurden.")
+                    elif res["count"] == 0:
+                        st.warning("⚠️ **0 Tags gefunden!**")
+                        st.caption("Das System denkt, deine Vorlage ist ein statisches Word-Dokument. Wahrscheinlich wurden die `{ {` Klammern von Word zerrissen. Tippe die Variablen manuell neu ein, ohne Formatierungsänderungen.")
+                    else:
+                        st.success(f"✅ **{res['count']} Variablen** erfolgreich erkannt!")
+                        st.code(", ".join(res["tags"]))
 
         st.divider()
         ll_run = st.button(

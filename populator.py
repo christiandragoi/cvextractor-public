@@ -283,3 +283,24 @@ def populate_template(template_path: str, output_path: str, data: dict) -> str:
         )
     doc.save(output_path)
     return output_path
+
+def diagnose_template(template_path_or_file) -> dict:
+    """
+    Safely loads a DOCX template and attempts to parse all Jinja variables.
+    Returns: {"tags": [...], "error": str, "count": int}
+    """
+    try:
+        doc = DocxTemplate(template_path_or_file)
+        # Attempt to get undeclared variables (this parses the XML)
+        tags = doc.get_undeclared_template_variables()
+        return {
+            "tags": sorted(list(tags)),
+            "count": len(tags),
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "tags": [],
+            "count": 0,
+            "error": str(e)
+        }
