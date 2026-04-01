@@ -1054,12 +1054,17 @@ if active_tab == "📜 Lebenslauf":
 
         st.divider()
         st.markdown("**📝 Word-Vorlage (Kandidatenprofil)**")
-        ll_tpl_source = st.radio("Vorlage-Quelle", ["Built-in Styling", "Upload now", "Saved templates"], horizontal=True, key="ll_tpl_source")
+        # Auto-detect: if saved templates exist, default to "Saved templates"; otherwise "Upload now"
+        _saved_tpls = list(TEMPLATES_DIR.glob("*.docx"))
+        _default_source = "Saved templates" if _saved_tpls else "Upload now"
+        _source_options = ["Upload now", "Saved templates", "Built-in Styling"]
+        _default_idx = _source_options.index(_default_source) if _default_source in _source_options else 0
+        ll_tpl_source = st.radio("Vorlage-Quelle", _source_options, index=_default_idx, horizontal=True, key="ll_tpl_source")
         ll_tpl_path = None
         ll_tpl_file = None
         
         if ll_tpl_source == "Saved templates":
-            saved_tpls = list(TEMPLATES_DIR.glob("*.docx"))
+            saved_tpls = _saved_tpls
             if saved_tpls:
                 sel = st.selectbox("Vorlage wählen", [f.name for f in saved_tpls], key="ll_tpl_sel")
                 ll_tpl_path = str(TEMPLATES_DIR / sel)
