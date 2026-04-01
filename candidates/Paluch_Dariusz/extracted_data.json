@@ -34,7 +34,7 @@
       "von": "09/2012",
       "bis": "03/2017",
       "arbeitgeber": "Zeitpuffer / Projektpause / Transporttätigkeit",
-      "ort_land": "Niederlande",
+      "ort_land": "Polen",
       "position": "Transportwesen",
       "taetigkeiten": "Tätigkeit im Transportwesen und Logistik."
     },
@@ -99,26 +99,21 @@
     {
       "jahre": "1983-1988",
       "einrichtung": "Zespół Szkół Zawodowych w Iławie, Polen",
-      "abschluss": "Metallbearbeitung / Schweißtechnik"
+      "abschluss": "Berufsausbildung Metallbearbeitung / Schweißtechnik"
     }
   ],
   "weiterbildung": [
     {
-      "jahre": "",
-      "anbieter": "Diverse",
-      "kurs": "Schweißzertifikate für Verfahren 111, 131, 135, 136, 138, 141"
+      "jahre": "2020",
+      "anbieter": "Diverse Anbieter",
+      "kurs": "Schweißkurse Verfahren: 111, 131, 135, 136, 138, 141"
     }
   ],
   "zertifikate": [
     {
-      "bezeichnung": "Schweißzertifikate",
-      "ausgestellt": "verschiedene Jahre",
-      "gueltig_bis": "null"
-    },
-    {
-      "bezeichnung": "Führerschein",
-      "ausgestellt": "vorhanden",
-      "gueltig_bis": "null"
+      "bezeichnung": "Diverse Schweißzertifikate (alle Verfahren und Materialien)",
+      "ausgestellt": "1988",
+      "gueltig_bis": null
     }
   ],
   "sprachen": [
@@ -181,12 +176,12 @@
       "beschreibung": "Advanced"
     }
   ],
-  "zusammenfassung": "Herr Paluch verfügt über mehr als 30 Jahre Berufserfahrung als Schweißer und Schlosser, insbesondere im Stahl-, Anlagen- und Schiffbau. Er hat sowohl in Polen als auch in den Niederlanden gearbeitet und ist erfahren im Umgang mit verschiedenen Schweißverfahren wie 111, 131, 135, 136, und 141, sowie mit Materialien wie Kohlenstoffstahl, Edelstahl und Aluminium. Herr Paluch kann Bauteile mit Wandstärken zwischen 5 und 50 mm präzise nach technischen Zeichnungen fertigen. Er ist flexibel, belastbar und für weltweite Einsätze geeignet. Zudem besitzt er diverse Schweißzertifikate und einen Führerschein und ist erfahren im Einsatz von Baumaschinen. Herr Paluchs Sprachkenntnisse umfassen Polnisch als Muttersprache sowie Deutsch auf B1-Niveau und Englisch auf A2-Niveau.",
+  "zusammenfassung": "Herr Paluch verfügt über mehr als 30 Jahre Berufserfahrung als Schweißer und Schlosser in verschiedenen industriellen Bereichen. Seine umfangreichen Fachkenntnisse erstrecken sich über die Schweißverfahren 111, 135, 136, 138 und 141, die er sowohl in Polen als auch in den Niederlanden an anspruchsvollen Projekten einsetzte. Herr Paluch ist speziell auf die Fertigung von Stahl- und Aluminiumkonstruktionen spezialisiert, wobei er oft mit Wandstärken zwischen 5 und 50 mm arbeitet. Er hat Schweißzertifikate für verschiedene Verfahren und Materialien erworben und ist an die Herausforderungen internationaler Einsätze gewöhnt. Zusätzlich zu seinen technischen Fähigkeiten ist er im Umgang mit technischen Zeichnungen erfahren und bringt vielseitige Einsatzfähigkeit in Werkstätten und bei Montageeinsätzen mit. Dies macht ihn zu einem wertvollen Mitarbeiter für Projekte im industriellen und Schiffbaugewerbe.",
   "job_role": "Schweißer",
   "name": "Dariusz Paluch",
   "email": "",
   "nationality": "Polnisch",
-  "profile_summary": "Herr Paluch verfügt über mehr als 30 Jahre Berufserfahrung als Schweißer und Schlosser, insbesondere im Stahl-, Anlagen- und Schiffbau. Er hat sowohl in Polen als auch in den Niederlanden gearbeitet und ist erfahren im Umgang mit verschiedenen Schweißverfahren wie 111, 131, 135, 136, und 141, sowie mit Materialien wie Kohlenstoffstahl, Edelstahl und Aluminium. Herr Paluch kann Bauteile mit Wandstärken zwischen 5 und 50 mm präzise nach technischen Zeichnungen fertigen. Er ist flexibel, belastbar und für weltweite Einsätze geeignet. Zudem besitzt er diverse Schweißzertifikate und einen Führerschein und ist erfahren im Einsatz von Baumaschinen. Herr Paluchs Sprachkenntnisse umfassen Polnisch als Muttersprache sowie Deutsch auf B1-Niveau und Englisch auf A2-Niveau.",
+  "profile_summary": "Herr Paluch verfügt über mehr als 30 Jahre Berufserfahrung als Schweißer und Schlosser in verschiedenen industriellen Bereichen. Seine umfangreichen Fachkenntnisse erstrecken sich über die Schweißverfahren 111, 135, 136, 138 und 141, die er sowohl in Polen als auch in den Niederlanden an anspruchsvollen Projekten einsetzte. Herr Paluch ist speziell auf die Fertigung von Stahl- und Aluminiumkonstruktionen spezialisiert, wobei er oft mit Wandstärken zwischen 5 und 50 mm arbeitet. Er hat Schweißzertifikate für verschiedene Verfahren und Materialien erworben und ist an die Herausforderungen internationaler Einsätze gewöhnt. Zusätzlich zu seinen technischen Fähigkeiten ist er im Umgang mit technischen Zeichnungen erfahren und bringt vielseitige Einsatzfähigkeit in Werkstätten und bei Montageeinsätzen mit. Dies macht ihn zu einem wertvollen Mitarbeiter für Projekte im industriellen und Schiffbaugewerbe.",
   "birth_date": "31.07.1968",
   "birth_place": "Iława, Polen"
 }

@@ -1,0 +1,116 @@
+{
+  "anrede": "Herr",
+  "vorname": "Florentin",
+  "nachname": "Voicu",
+  "geburtsdatum": "1962",
+  "geburtsort": "Prahova, Rumänien",
+  "staatsangehoerigkeit": "Rumänisch",
+  "berufserfahrung": [
+    {
+      "von": "10/2025",
+      "bis": "present",
+      "arbeitgeber": "TUSA ENERGI AB, Boden",
+      "ort_land": "Schweden",
+      "position": "Rohrleitungsbauer",
+      "taetigkeiten": "Installation von Rohren, Ausrüstung und Rohrhalterungen auf der Baustelle für den Bau einer grünen Stahlfabrik."
+    },
+    {
+      "von": "07/2025",
+      "bis": "10/2025",
+      "arbeitgeber": "Projekt in UK",
+      "ort_land": "Vereinigtes Königreich",
+      "position": "Rohrleitungsbauer",
+      "taetigkeiten": "Installation von Rohrleitungen gemäß Isometrien, Montage von Rohrhalterungen und Verbindung der Rohrleitungen durch Crimptechnik in einem Müllverwertungswerk."
+    },
+    {
+      "von": "2021",
+      "bis": "2024",
+      "arbeitgeber": "Voicu Construct",
+      "ort_land": "Rumänien",
+      "position": "Gründer & Auftragnehmer",
+      "taetigkeiten": "Gründung und Betrieb eines Unternehmens für Wohn- und Gewerbebau mit Schwerpunkt auf Metallkonstruktionen und Installationen."
+    },
+    {
+      "von": "2013",
+      "bis": "2020",
+      "arbeitgeber": "Passive House Builder",
+      "ort_land": "Belgien, Deutschland, Niederlande, Luxemburg",
+      "position": "Gründer & Bauleiter",
+      "taetigkeiten": "Management eines Bauunternehmens mit Spezialisierung auf Argisol-Passivhaussysteme."
+    },
+    {
+      "von": "1992",
+      "bis": "2013",
+      "arbeitgeber": "Eigenes Bauunternehmen",
+      "ort_land": "Rumänien",
+      "position": "Eigentümer",
+      "taetigkeiten": "Betrieb eines Privatunternehmens im zivilen und Metallbau. Spezialisierung auf Passivhäuser seit 2007."
+    },
+    {
+      "von": "1981",
+      "bis": "1990",
+      "arbeitgeber": "Mechanische Werk Plopeni",
+      "ort_land": "Rumänien",
+      "position": "Schweißer & Metallbautechniker",
+      "taetigkeiten": "Arbeit als Schweißer und Monteur in der Metallbearbeitungsabteilung sowie in der Produktion und Montage von industriellen Metallkomponenten."
+    }
+  ],
+  "bildung": [
+    {
+      "jahre": "1975-1979",
+      "einrichtung": "Industrielle Oberschule Plopeni",
+      "abschluss": "Sekundärtechnische Ausbildung"
+    },
+    {
+      "jahre": "1979-1981",
+      "einrichtung": "Berufsschule für Schweißen, Timișoara",
+      "abschluss": "Qualifizierter Schweißer"
+    }
+  ],
+  "weiterbildung": [],
+  "zertifikate": [
+    {
+      "bezeichnung": "Zertifizierter Baustellenleiter (Bauleiter)",
+      "ausgestellt": "nicht spezifiziert",
+      "gueltig_bis": null
+    }
+  ],
+  "sprachen": [
+    {
+      "sprache": "Französisch",
+      "niveau": "B2"
+    },
+    {
+      "sprache": "Englisch",
+      "niveau": "A2"
+    },
+    {
+      "sprache": "Italienisch",
+      "niveau": "A2"
+    }
+  ],
+  "faehigkeiten": [
+    {
+      "name": "Schweißfertigung",
+      "beschreibung": "Expert in MIG/MAG/TIG-Schweißen und Metallbearbeitung."
+    },
+    {
+      "name": "Installation",
+      "beschreibung": "Advanced in Heizungs- und Sanitärinstallationen."
+    },
+    {
+      "name": "Technisches Zeichnen",
+      "beschreibung": "Advanced in technischer Zeichnung und Bauplanlesung."
+    },
+    {
+      "name": "Baukoordination",
+      "beschreibung": "Advanced in Baustellenkoordination und Projektaufsicht."
+    }
+  ],
+  "zusammenfassung": "Herr Voicu verfügt über mehr als 40 Jahre Berufserfahrung in der Metall- und Bauindustrie mit Schwerpunkt auf MIG/MAG/TIG-Schweißverfahren. Er hat Erfahrung im internationalen Umfeld und umfangreiche Kenntnisse in der Leitung großer Bauprojekte in Europa. Technisches Zeichnen und Bauplanung zählen zu seinen Stärken. Als zertifizierter Baustellenleiter in Deutschland ist er flexibel und bereit für Einsätze in West- und Nordeuropa. Seine technische Expertise umfasst auch die Anwendung von Passivhaussystemen und industriellen Bauprojekten. Herr Voicu beherrscht Französisch auf einem fortgeschrittenen Niveau und hat Grundkenntnisse in Englisch und Italienisch.",
+  "name": "Florentin Voicu",
+  "job_role": "Schweißer",
+  "nationality": "Rumänisch",
+  "profile_summary": "Herr Voicu verfügt über mehr als 40 Jahre Berufserfahrung in der Metall- und Bauindustrie mit Schwerpunkt auf MIG/MAG/TIG-Schweißverfahren. Er hat Erfahrung im internationalen Umfeld und umfangreiche Kenntnisse in der Leitung großer Bauprojekte in Europa. Technisches Zeichnen und Bauplanung zählen zu seinen Stärken. Als zertifizierter Baustellenleiter in Deutschland ist er flexibel und bereit für Einsätze in West- und Nordeuropa. Seine technische Expertise umfasst auch die Anwendung von Passivhaussystemen und industriellen Bauprojekten. Herr Voicu beherrscht Französisch auf einem fortgeschrittenen Niveau und hat Grundkenntnisse in Englisch und Italienisch.",
+  "birth_date": "1962"
+}
