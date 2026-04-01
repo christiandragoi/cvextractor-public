@@ -1231,6 +1231,84 @@ if active_tab == "📜 Lebenslauf":
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
+                # ── 📊 DATA INSPECTOR ───────────────────────────────────
+                st.markdown('<div class="bento-card">', unsafe_allow_html=True)
+                st.markdown('<div class="bento-title">📊 Data Inspector</div>', unsafe_allow_html=True)
+                st.caption("Check exactly what was extracted. Empty lists = missing data in the output document!")
+
+                # Quick summary badges
+                bildung_count = len(ll_ext.get("bildung", []))
+                wb_count = len(ll_ext.get("weiterbildung", []))
+                jobs_count = len(ll_ext.get("berufserfahrung", ll_ext.get("employment_history", [])))
+                lang_count = len(ll_ext.get("sprachen", ll_ext.get("language_skills", [])))
+
+                badge_cols = st.columns(4)
+                badge_cols[0].metric("Berufserfahrung", jobs_count, delta="entries" if jobs_count else None, delta_color="normal")
+                badge_cols[1].metric("Bildung", bildung_count, delta="✅" if bildung_count else "⚠️ EMPTY", delta_color="normal" if bildung_count else "inverse")
+                badge_cols[2].metric("Weiterbildung", wb_count, delta="✅" if wb_count else "⚠️ EMPTY", delta_color="normal" if wb_count else "inverse")
+                badge_cols[3].metric("Sprachen", lang_count, delta="✅" if lang_count else "⚠️ EMPTY", delta_color="normal" if lang_count else "inverse")
+
+                with st.expander("🔍 Full Extracted Data (JSON)", expanded=(bildung_count == 0)):
+                    # Show a trimmed view with key education/language fields first
+                    key_fields = {
+                        "bildung": ll_ext.get("bildung", []),
+                        "weiterbildung": ll_ext.get("weiterbildung", []),
+                        "berufserfahrung (first entry)": ll_ext.get("berufserfahrung", ll_ext.get("employment_history", []))[:1],
+                        "sprachen": ll_ext.get("sprachen", ll_ext.get("language_skills", [])),
+                        "faehigkeiten": ll_ext.get("faehigkeiten", []),
+                    }
+                    st.json(key_fields)
+                    st.caption("---")
+                    st.caption("Full raw data:")
+                    st.json(ll_ext)
+                
+                # ── ✏️ MANUAL JSON EDITOR ──────────────────────────────
+                st.markdown("---")
+                st.markdown("**✏️ Fix Missing Data Manually**")
+                st.caption("If 'Bildung' or 'Weiterbildung' is empty above, paste the correct data here and click Apply. Use exact JSON format.")
+                
+                edit_tabs = st.tabs(["Bildung (Schule/Uni)", "Weiterbildung (Kurse)"])
+                
+                with edit_tabs[0]:
+                    default_bildung = json.dumps(ll_ext.get("bildung", []), indent=2, ensure_ascii=False)
+                    new_bildung_str = st.text_area(
+                        "Bildungsdaten (JSON)", value=default_bildung, height=150,
+                        key="ll_manual_bildung",
+                        help='Format: [{"jahre": "2000-2004", "einrichtung": "Schule", "abschluss": "Abschluss"}]'
+                    )
+                    if st.button("✅ Apply Bildung", key="ll_apply_bildung"):
+                        try:
+                            new_bildung = json.loads(new_bildung_str)
+                            if isinstance(new_bildung, list):
+                                ll_ext["bildung"] = new_bildung
+                                ll_buf["data"]["bildung"] = new_bildung
+                                st.success(f"✅ Bildung updated with {len(new_bildung)} entries!")
+                            else:
+                                st.error("Must be a JSON list [ ... ]")
+                        except json.JSONDecodeError as e:
+                            st.error(f"Invalid JSON: {e}")
+                
+                with edit_tabs[1]:
+                    default_wb = json.dumps(ll_ext.get("weiterbildung", []), indent=2, ensure_ascii=False)
+                    new_wb_str = st.text_area(
+                        "Weiterbildungsdaten (JSON)", value=default_wb, height=150,
+                        key="ll_manual_wb",
+                        help='Format: [{"jahre": "2015", "anbieter": "TÜV", "kurs": "ISO 9606-1"}]'
+                    )
+                    if st.button("✅ Apply Weiterbildung", key="ll_apply_wb"):
+                        try:
+                            new_wb = json.loads(new_wb_str)
+                            if isinstance(new_wb, list):
+                                ll_ext["weiterbildung"] = new_wb
+                                ll_buf["data"]["weiterbildung"] = new_wb
+                                st.success(f"✅ Weiterbildung updated with {len(new_wb)} entries!")
+                            else:
+                                st.error("Must be a JSON list [ ... ]")
+                        except json.JSONDecodeError as e:
+                            st.error(f"Invalid JSON: {e}")
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
             with ll_col_b2:
                 st.markdown('<div class="bento-card">', unsafe_allow_html=True)
                 st.markdown('<div class="bento-title">🚀 Output Factory</div>', unsafe_allow_html=True)
