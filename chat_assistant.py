@@ -42,7 +42,9 @@ def chat_gemini(messages: list[dict], model: str, api_key: str) -> str:
         ))
 
     client = genai.Client(api_key=api_key)
-    resp = client.models.generate_content(model=model, contents=contents)
+    # Ensure Gemini model names have the 'models/' prefix
+    actual_model = model if model.startswith("models/") else f"models/{model}"
+    resp = client.models.generate_content(model=actual_model, contents=contents)
     return resp.text or ""
 
 
@@ -93,6 +95,10 @@ CHAT_DISPATCH = {
         msgs, model, "ollama",
         (key.rstrip("/") if key.startswith("http") else "http://localhost:11434") + "/v1"
     ),
+    "TogetherAI":  lambda msgs, model, key: chat_openai(msgs, model, key, "https://api.together.xyz/v1"),
+    "Groq":        lambda msgs, model, key: chat_openai(msgs, model, key, "https://api.groq.com/openai/v1"),
+    "OpenRouter":  lambda msgs, model, key: chat_openai(msgs, model, key, "https://openrouter.ai/api/v1"),
+    "Xiaomi MiMo": lambda msgs, model, key: chat_openai(msgs, model, key, "https://api.xiaomimimo.com/v1"),
 }
 
 
@@ -194,12 +200,19 @@ def build_chat_messages(
     chat_history: list[dict],
     cv_text: str | None = None,
     id_text: str | None = None,
+    context_name: str | None = None,
 ) -> list[dict]:
     """
     Build the messages list for the AI, including system prompt
     and optional CV and ID document context.
     """
     messages = [{"role": "system", "content": CV_SYSTEM_PROMPT}]
+    
+    if context_name:
+        messages.append({
+            "role": "system",
+            "content": f"AKTUELLER BEREICH: {context_name}. Hilf dem Benutzer spezifisch bei Fragen zu diesem Bereich."
+        })
 
     if cv_text:
         messages.append({
@@ -243,3 +256,60 @@ def extract_json_from_response(text: str) -> dict | None:
             pass
 
     return None
+
+
+def transcribe_audio(audio_bytes: bytes, provider: str, api_key: str) -> str:
+    """
+    Transcribe audio bytes to text using the selected provider.
+    Supported: OpenAI (Whisper), Deepgram, Eleven Labs.
+    """
+    if not audio_bytes:
+        return ""
+
+    if provider == "OpenAI":
+        from openai import OpenAI
+        import tempfile
+        client = OpenAI(api_key=api_key)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        try:
+            with open(tmp_path, "rb") as f:
+                resp = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=f
+                )
+            return resp.text
+        finally:
+            os.unlink(tmp_path)
+
+    elif provider == "Deepgram":
+        import requests
+        url = "https://api.deepgram.com/v1/listen?smart_format=true&model=nova-2&language=de"
+        headers = {
+            "Authorization": f"Token {api_key}",
+            "Content-Type": "audio/wav"
+        }
+        resp = requests.post(url, headers=headers, data=audio_bytes)
+        resp.raise_for_status()
+        return resp.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+
+    elif provider == "Eleven Labs":
+        import requests
+        # Eleven Labs Speech-to-Text (Dublin) endpoint
+        url = "https://api.elevenlabs.io/v1/speech-to-text"
+        headers = {
+            "xi-api-key": api_key
+        }
+        files = {
+            "file": ("audio.wav", audio_bytes, "audio/wav")
+        }
+        data = {
+            "model_id": "scribble-v1" # or latest STT model
+        }
+        resp = requests.post(url, headers=headers, files=files, data=data)
+        resp.raise_for_status()
+        return resp.json()["text"]
+
+    else:
+        raise ValueError(f"STT not supported for provider: {provider}")

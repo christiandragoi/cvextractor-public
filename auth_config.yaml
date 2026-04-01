@@ -16,3 +16,11 @@ credentials:
       name: Cris
       password: $2b$12$rjcCiZVLb47BZE1pYpo5veppUzRIoS4PrPVNUkgJtP/XvZHl7kDda
       role: admin
+    test2@example.com:
+      name: Test User 2
+      password: $2b$12$Zx7.KVVe9RXvcQ8SUWk91.WTtfANqfpPJoX5TVWNRuHRHFYJjiTx6
+      role: user
+    test@example.com:
+      name: Test User
+      password: $2b$12$jFkpZAt1HOQocEDjciCQ.e3hf8VdibyhuB4HEqa8T/6XtqzeLrhT2
+      role: user

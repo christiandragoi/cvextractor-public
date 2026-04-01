@@ -1,8 +1,12 @@
 import streamlit as st
 import os
-import json
+import sys
 import tempfile
+import json
 from pathlib import Path
+
+
+from streamlit_mic_recorder import mic_recorder
 from extractor import get_cv_data, get_identity_data, get_lebenslauf_data
 from populator import populate_template
 from lebenslauf_builder import build_lebenslauf_docx
@@ -10,7 +14,7 @@ from auth import render_login_page, render_logout_button, render_user_management
 from candidates_manager import (
     list_candidates, get_candidate, save_candidate_cv, save_candidate_lebenslauf,
     add_id_document, save_identcheck, delete_candidate, get_cv_path, get_id_paths,
-    candidate_name_from_data,
+    candidate_name_from_data, fetch_stored_json, CANDIDATES_DIR,
 )
 from chat_assistant import (
     send_chat_message, build_chat_messages, extract_json_from_response,
@@ -45,7 +49,11 @@ AI_PROVIDERS = {
     "Kimi K2":   {"models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],               "key_name": "kimi_api_key",      "local": False},
     "Qwen":      {"models": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"],                      "key_name": "qwen_api_key",      "local": False},
     "Perplexity":{"models": ["sonar-pro", "sonar", "llama-3.1-sonar-large-128k-online"],        "key_name": "perplexity_api_key", "local": False},
-    "Ollama":    {"models": ["llama3.3", "llama3.1", "mistral", "gemma3", "phi4", "deepseek-r1"],      "key_name": "ollama_host",       "local": True},
+    "Ollama":     {"models": ["llama3.3", "llama3.1", "mistral", "gemma3", "phi4", "deepseek-r1"],      "key_name": "ollama_host",       "local": True},
+    "TogetherAI": {"models": ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"], "key_name": "togetherai_api_key", "local": False},
+    "Groq":       {"models": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],                        "key_name": "groq_api_key",       "local": False},
+    "OpenRouter": {"models": ["anthropic/claude-3.5-sonnet", "google/gemini-2.0-flash-001"],           "key_name": "openrouter_api_key", "local": False},
+    "Xiaomi MiMo":{"models": ["mimo-v2-pro", "mimo-v2-mini"],                                          "key_name": "xiaomi_api_key",     "local": False},
 }
 
 SETTINGS_FILE = Path(__file__).parent / ".settings.json"
@@ -62,12 +70,14 @@ def load_settings() -> dict:
         except Exception:
             pass
     
-    # 2. Merge st.secrets if running in Streamlit Cloud
+    # 2. Merge st.secrets if running in Streamlit Cloud (only if it doesn't crash)
     try:
-        # st.secrets behaves like a dict
-        for k, v in st.secrets.items():
-            if k not in data or not data[k]:
-                data[k] = v
+        if hasattr(st, "secrets"):
+            # Use dict() conversion inside try to catch parsing errors
+            secrets_dict = dict(st.secrets)
+            for k, v in secrets_dict.items():
+                if k not in data or not data[k]:
+                    data[k] = v
     except Exception:
         pass
         
@@ -103,6 +113,11 @@ def _add_history(name: str, provider: str, model: str, record_type: str = "CV"):
         "ts": datetime.now().strftime("%H:%M"), "type": record_type,
     })
     st.session_state.history = st.session_state.history[:10]  # keep last 10
+
+if "extracted_data_buffer" not in st.session_state:
+    st.session_state.extracted_data_buffer = None
+if "auto_trust_ai" not in st.session_state:
+    st.session_state.auto_trust_ai = False
 
 def get_fallback_providers(primary_provider: str) -> list[tuple[str, str, str]]:
     """Return (provider, model, api_key) for every configured provider except the primary."""
@@ -152,6 +167,45 @@ st.markdown(f"""
     .badge   {{ display:inline-block; background:#0f3460; color:#60a5fa;
                 border:1px solid #1e40af; border-radius:999px;
                 font-size:.75rem; padding:2px 10px; margin-right:6px; margin-top:4px; }}
+    
+    /* Bento Grid System */
+    .bento-grid {{
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 1.5rem;
+        padding: 10px 0;
+    }}
+    .bento-card {{
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        padding: 20px;
+        transition: all 0.3s ease;
+        height: 100%;
+        color: #e2e8f0;
+    }}
+    .bento-card:hover {{
+        border: 1px solid rgba(0, 255, 242, 0.4);
+        box-shadow: 0 0 20px rgba(0, 255, 242, 0.05);
+    }}
+    .bento-title {{
+        font-weight: 700;
+        font-size: 1.1rem;
+        margin-bottom: 12px;
+        color: #00fff2;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }}
+    .bento-hero {{ grid-column: span 8; border-left: 4px solid #00fff2; }}
+    .bento-side {{ grid-column: span 4; }}
+    
+    /* Input overrides for Cinematic feel */
+    div[data-baseweb="input"] {{
+        background: rgba(255,255,255,0.05) !important;
+        border-radius: 12px !important;
+    }}
 </style>
 <div class="hero">
   <h1>📄 CV Extractor &amp; Template Populator</h1>
@@ -198,18 +252,149 @@ with st.sidebar:
                     st.session_state.k_select_folder = folder
                     st.toast(f"Switched to: {name}")
 
+                # JSON Sync to Bento Hero Card
+                if st.sidebar.button(f"🔄 Sync {name}", key=f"sync_{folder}", use_container_width=True):
+                    # 1. Fetch data
+                    saved_data = fetch_stored_json(folder)
+                    cv_file_path = get_cv_path(folder)
+                    
+                    # 2. Sync to Buffer
+                    if saved_data and cv_file_path:
+                        st.session_state.extracted_data_buffer = {
+                            "data": saved_data,
+                            "cv_path": cv_file_path,
+                            "cv_name": Path(cv_file_path).name,
+                            "cv_buffer": open(cv_file_path, "rb").read(),
+                            "tpl_path": str(TEMPLATES_DIR / "Schweißer_template.docx"), # Fallback tpl
+                            "provider": "Saved",
+                            "model": "Historical",
+                            "status": "synced",
+                            "final_path": str(CANDIDATES_DIR / folder / "Populated_CV.docx")
+                        }
+                        st.session_state.active_tab = "🚀 Process CV"
+                        st.toast(f"Synchronized {name} to Review Station!")
+                        st.rerun()
+                    else:
+                        st.error("Could not find extraction data for this candidate.")
+
     if st.button("🗑️ Clear Local History", use_container_width=True):
         st.session_state.history = []  # Keep legacy history clear for now
         st.rerun()
 
-tab_process, tab_templates, tab_settings, tab_ident, tab_leben, tab_kand, tab_chat = st.tabs(
-    ["🚀 Process CV", "📁 Templates", "⚙️ Settings", "🪪 Identcheck", "📋 Lebenslauf", "👥 Kandidaten", "💬 AI Chat"]
-)
+st.sidebar.title("🧭 Navigation")
+nav_options = [
+    "🚀 Process CV", "👥 Candidates", "📁 Templates", 
+    "🪪 Identcheck", "📜 Lebenslauf", "⚙️ Settings"
+]
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = nav_options[0]
+
+active_tab = st.sidebar.radio("Go to", nav_options, index=nav_options.index(st.session_state.active_tab))
+st.session_state.active_tab = active_tab
+
+# Assistant Launcher in Sidebar
+st.sidebar.divider()
+st.sidebar.subheader("🎙️ AI Assistant")
+with st.sidebar.expander("💬 Chat & Voice Commands", expanded=False):
+    # Assistant configuration
+    c1, c2 = st.columns(2)
+    chat_provider = c1.selectbox("Provider", list(AI_PROVIDERS.keys()), key="chat_side_prov", index=0)
+    chat_model = c2.selectbox("Model", AI_PROVIDERS[chat_provider]["models"], key="chat_side_model")
+    
+    st.caption("Choose STT Provider:")
+    stt_prov = st.radio("STT", ["OpenAI", "Deepgram", "Eleven Labs"], horizontal=True, key="stt_side_prov", label_visibility="collapsed")
+    
+    st.markdown("---")
+    
+    # 🎤 Microphone Recorder
+    footer_cols = st.columns([1, 4])
+    with footer_cols[0]:
+        audio = mic_recorder(
+            start_prompt="🎙️",
+            stop_prompt="🛑",
+            key='side_mic',
+            use_container_width=False,
+        )
+    
+    transcribed_text = ""
+    if audio:
+        stt_key_map = {
+            "OpenAI": ("OpenAI", "openai_api_key"),
+            "Deepgram": ("Deepgram", "deepgram_api_key"),
+            "Eleven Labs": ("Eleven Labs", "elevenlabs_api_key")
+        }
+        actual_prov, key_name = stt_key_map[stt_prov]
+        stt_api_key = cfg(key_name)
+        
+        if stt_api_key:
+            with st.spinner("Transcribing..."):
+                from chat_assistant import transcribe_audio
+                try:
+                    transcribed_text = transcribe_audio(audio['bytes'], actual_prov, stt_api_key)
+                    if transcribed_text:
+                        st.info(f"You said: {transcribed_text}")
+                except Exception as e:
+                    st.error(f"STT Error: {e}")
+        else:
+            st.error(f"Missing {actual_prov} API key.")
+
+    # Chat History Display
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+    
+    for msg in st.session_state.chat_messages[-5:]: # Show last 5
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Chat Input
+    side_input = st.chat_input("Ask or speak...")
+    
+    prompt = None
+    if side_input:
+        prompt = side_input
+    elif transcribed_text:
+        if "last_side_stt" not in st.session_state or st.session_state.last_side_stt != transcribed_text:
+            prompt = transcribed_text
+            st.session_state.last_side_stt = transcribed_text
+
+    if prompt:
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("AI is thinking..."):
+                try:
+                    # Get current candidate context if available
+                    cv_ctx, id_ctx = None, None
+                    if "k_select_folder" in st.session_state:
+                         from candidates_manager import get_cv_path, get_id_paths
+                         cv_p = get_cv_path(st.session_state.k_select_folder)
+                         if cv_p: cv_ctx = extract_text_from_any(cv_p)
+                         id_ps = get_id_paths(st.session_state.k_select_folder)
+                         if id_ps: id_ctx = "\n".join([extract_text_from_any(p) for p in id_ps])
+
+                    from chat_assistant import build_chat_messages, send_chat_message
+                    full_msgs = build_chat_messages(
+                        st.session_state.chat_messages,
+                        cv_text=cv_ctx,
+                        id_text=id_ctx,
+                        context_name=st.session_state.active_tab
+                    )
+                    resp = send_chat_message(full_msgs, chat_provider, chat_model, cfg(AI_PROVIDERS[chat_provider]["key_name"]))
+                    st.markdown(resp)
+                    st.session_state.chat_messages.append({"role": "assistant", "content": resp})
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    if st.button("🗑️ Clear", key="clear_side_chat"):
+        st.session_state.chat_messages = []
+        st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════
 # TAB 1 — PROCESS CV
 # ═══════════════════════════════════════════════════════════════════
-with tab_process:
+if active_tab == "🚀 Process CV":
     col_left, col_right = st.columns([1, 2])
 
     with col_left:
@@ -293,7 +478,7 @@ with tab_process:
                     attempt_list = [(provider, model, api_key)] + get_fallback_providers(provider)
                     for _p, _m, _k in attempt_list:
                         try:
-                            extracted = get_cv_data(cv_path, provider=_p, model=_m, api_key=_k)
+                            extracted = get_lebenslauf_data([cv_path], job_role=job_role, provider=_p, model=_m, api_key=_k)
                             _used_provider, _used_model = _p, _m
                             if _p != provider:
                                 st.toast(f"⚠️ {provider} failed → switched to **{_p}**", icon="🔄")
@@ -310,52 +495,32 @@ with tab_process:
                     if extracted is None:
                         combined_errs = "\n".join([f"- {e}" for e in _errors])
                         raise RuntimeError(f"All providers failed:\n{combined_errs}")
+                    
                     extracted["job_role"] = job_role or extracted.get("job_role", "N/A")
                     
-                    # Define cand_name before using it
-                    cand_name = candidate_name_from_data(extracted)
-                    _add_history(cand_name, _used_provider, _used_model, "CV")
-
-                    _prog.progress(65, text="📝 Populating Word template…")
-
-                    # Step 3 — populate template
-                    out_name = f"Populated_{Path(cv_file.name).stem}.docx"
-                    out_path = os.path.join(tempfile.gettempdir(), out_name)
-                    populate_template(tpl_path, out_path, extracted)
-
-                    # Step 4 — auto-save to candidate folder
-                    save_candidate_cv(
-                        cand_name,
-                        cv_file.getbuffer(),
-                        cv_file.name,
-                        extracted,
-                        out_path,
-                    )
-
-                    _prog.progress(100, text="✅ Done!")
-                    st.success(f"✅ CV processed & saved to **👥 Kandidaten → {cand_name}**")
-
-                    # Extracted data viewer
-                    with st.expander("📊 View extracted data", expanded=True):
-                        st.json(extracted)
-
-                    # Downloads side by side
-                    dl1, dl2 = st.columns(2)
-                    with open(out_path, "rb") as f:
-                        dl1.download_button(
-                            label="⬇️ Download Word Document",
-                            data=f,
-                            file_name=out_name,
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True,
-                        )
-                    dl2.download_button(
-                        label="⬇️ Export JSON",
-                        data=json.dumps(extracted, indent=2, ensure_ascii=False),
-                        file_name=f"{Path(cv_file.name).stem}_data.json",
-                        mime="application/json",
-                        use_container_width=True,
-                    )
+                    # Instead of auto-generating, push to Buffer for Human Review
+                    st.session_state.extracted_data_buffer = {
+                        "data": extracted,
+                        "cv_path": cv_path,
+                        "cv_name": cv_file.name,
+                        "cv_buffer": cv_file.getbuffer(),
+                        "tpl_path": tpl_path,
+                        "provider": _used_provider,
+                        "model": _used_model,
+                        "status": "ready"
+                    }
+                    
+                    if st.session_state.auto_trust_ai:
+                        # Auto-approve if toggle is ON
+                        cand_name = candidate_name_from_data(extracted)
+                        _add_history(cand_name, _used_provider, _used_model, "CV")
+                        out_name = f"Populated_{Path(cv_file.name).stem}.docx"
+                        out_path = os.path.join(tempfile.gettempdir(), out_name)
+                        populate_template(tpl_path, out_path, extracted)
+                        save_candidate_cv(cand_name, cv_file.getbuffer(), cv_file.name, extracted, out_path)
+                        st.session_state.extracted_data_buffer["final_path"] = out_path
+                        st.session_state.extracted_data_buffer["status"] = "synced"
+                        st.toast("Anti-Gravity Mode: AI Trust Sync successful!")
 
                 except Exception as e:
                     import traceback
@@ -364,10 +529,103 @@ with tab_process:
                 finally:
                     _prog.empty()
 
+        # ── 🔍 BENTO REVIEW BRIDGE ───────────────────────────────────
+        if st.session_state.extracted_data_buffer:
+            buf = st.session_state.extracted_data_buffer
+            ext = buf["data"]
+            
+            st.divider()
+            st.markdown("### 🔍 Human-in-the-Loop Review")
+            st.caption("Verify and optimize the AI-extracted metadata before synchronizing to Candidate Vault.")
+
+            # Layout manually as Streamlit columns don't easily mirror CSS grid spans 
+            # while maintaining reactive widgets, but we wrap them in our CSS classes.
+            col_b1, col_b2 = st.columns([2, 1])
+
+            with col_b1:
+                st.markdown('<div class="bento-card bento-hero">', unsafe_allow_html=True)
+                st.markdown('<div class="bento-title">✨ Hero Review Station</div>', unsafe_allow_html=True)
+                
+                c_edit1, c_edit2 = st.columns(2)
+                with c_edit1:
+                    default_name = ext.get("name", "") or f"{ext.get('vorname', '')} {ext.get('nachname', '')}".strip()
+                    rev_name = st.text_input("Name", value=default_name, key="rev_name")
+                    
+                    default_dob = ext.get("geburtsdatum", ext.get("birth_date", ""))
+                    rev_dob = st.text_input("Birth Date", value=default_dob, key="rev_dob")
+                    
+                    rev_email = st.text_input("Email", value=ext.get("email", ""), key="rev_email")
+                with c_edit2:
+                    default_role = ext.get("job_role", "")
+                    rev_role = st.text_input("Current Role", value=default_role, key="rev_role")
+                    
+                    default_pob = ext.get("geburtsort", ext.get("birth_place", ""))
+                    rev_pob = st.text_input("Birth Place", value=default_pob, key="rev_pob")
+                    
+                    default_nat = ext.get("nationality", "") or ext.get("staatsangehoerigkeit", "")
+                    rev_nationality = st.text_input("Nationality", value=default_nat, key="rev_nat")
+                
+                default_sum = ext.get("profile_summary", "") or ext.get("zusammenfassung", "")
+                rev_summary = st.text_area("German Synthesis / Summary", value=default_sum, height=180, key="rev_summary")
+                
+                # --- SYNC BUFFER ---
+                ext["name"] = rev_name
+                if " " in rev_name:
+                    ext["vorname"], ext["nachname"] = rev_name.split(" ", 1)
+                else:
+                    ext["vorname"] = ""; ext["nachname"] = rev_name
+                
+                ext["email"] = rev_email
+                ext["job_role"] = rev_role
+                ext["nationality"] = rev_nationality
+                ext["staatsangehoerigkeit"] = rev_nationality
+                ext["profile_summary"] = rev_summary
+                ext["zusammenfassung"] = rev_summary
+                
+                # New fields sync
+                ext["birth_date"] = rev_dob; ext["geburtsdatum"] = rev_dob
+                ext["birth_place"] = rev_pob; ext["geburtsort"] = rev_pob
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            with col_b2:
+                st.markdown('<div class="bento-card">', unsafe_allow_html=True)
+                st.markdown('<div class="bento-title">⚙️ Automation Vault</div>', unsafe_allow_html=True)
+                st.session_state.auto_trust_ai = st.toggle("Trust AI (Anti-Gravity Mode)", value=st.session_state.auto_trust_ai, help="Skip review and auto-generate documents")
+                
+                st.info(f"AI Provider: **{buf['provider']}**\nModel: `{buf['model']}`")
+                
+                if buf["status"] == "ready":
+                    if st.button("✨ Approve & Synchronize", type="primary", use_container_width=True):
+                        try:
+                            c_name = candidate_name_from_data(ext)
+                            out_name = f"Populated_{Path(buf['cv_name']).stem}.docx"
+                            out_path = os.path.join(tempfile.gettempdir(), out_name)
+                            
+                            _add_history(c_name, buf["provider"], buf["model"], "CV")
+                            populate_template(buf["tpl_path"], out_path, ext)
+                            save_candidate_cv(c_name, buf["cv_buffer"], buf["cv_name"], ext, out_path)
+                            
+                            st.session_state.extracted_data_buffer["status"] = "synced"
+                            st.session_state.extracted_data_buffer["final_path"] = out_path
+                            st.success("Synchronized successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Sync failed: {e}")
+                else:
+                    st.success("✅ Document Finalized")
+                    with open(buf["final_path"], "rb") as f:
+                        st.download_button("⬇️ Download Final Word Doc", data=f, file_name=f"Populated_{Path(buf['cv_name']).stem}.docx", use_container_width=True)
+                    if st.button("🔄 Process New CV", use_container_width=True):
+                        st.session_state.extracted_data_buffer = None
+                        st.rerun()
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+
 # ═══════════════════════════════════════════════════════════════════
 # TAB 2 — TEMPLATES
 # ═══════════════════════════════════════════════════════════════════
-with tab_templates:
+if active_tab == "📁 Templates":
     st.subheader("📁 Manage Templates")
     st.markdown("Upload and store Word (.docx) templates for each job profile. Saved templates appear in the **Process CV** tab.")
     col_a, col_b = st.columns(2)
@@ -377,6 +635,12 @@ with tab_templates:
         tpl_job = st.selectbox("Associate with job profile", JOB_PROFILES, key="tpl_job_sel")
         tpl_upload = st.file_uploader("DOCX template", type=["docx"], key="tpl_uploader")
         tpl_name_override = st.text_input("Custom filename (optional)", placeholder=f"{tpl_job}_template.docx")
+        st.divider()
+        st.subheader("🤖 Automation & Trust")
+        auto_val = st.checkbox("Trust AI (Anti-Gravity Mode)", value=st.session_state.settings.get("auto_trust_ai", False), help="Bypass the review bridge and auto-generate documents after extraction.")
+        st.session_state.settings["auto_trust_ai"] = auto_val
+        st.session_state.auto_trust_ai = auto_val
+
         if st.button("💾 Save Template", type="primary"):
             if tpl_upload is None:
                 st.warning("Please upload a DOCX file first.")
@@ -403,7 +667,7 @@ with tab_templates:
 # ═══════════════════════════════════════════════════════════════════
 # TAB 3 — SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-with tab_settings:
+if active_tab == "⚙️ Settings":
     st.subheader("⚙️ Settings")
     st.caption("Keys are stored locally in `.settings.json` in the app directory. They never leave your machine.")
 
@@ -425,7 +689,13 @@ with tab_settings:
         ("Kimi K2",    "kimi_api_key",       "sk-…",                  "🌙"),
         ("Qwen",       "qwen_api_key",       "sk-…",                  "🐋"),
         ("Perplexity", "perplexity_api_key", "pplx-…",                "🧠"),
+        ("TogetherAI", "togetherai_api_key", "tgp_v1_…",              "🚀"),
+        ("Groq",       "groq_api_key",       "gsk_…",                 "🏎️"),
+        ("OpenRouter", "openrouter_api_key", "sk-or-v1-…",            "🌐"),
+        ("Xiaomi MiMo","xiaomi_api_key",     "sk-…",                  "📱"),
         ("Ollama",     "ollama_host",        "http://localhost:11434", "🦙"),
+        ("Deepgram",   "deepgram_api_key",   "Token …",               "🎙️"),
+        ("Eleven Labs","elevenlabs_api_key", "xi-api-key …",          "🗣️"),
     ]
 
     # Bootstrap staging state
@@ -506,6 +776,15 @@ with tab_settings:
         new_settings["google_client_id"] = (st.session_state.key_staging.get("google_client_id") or "").strip()
         new_settings["google_client_secret"] = (st.session_state.key_staging.get("google_client_secret") or "").strip()
         new_settings["ollama_host"] = new_settings.get("ollama_host") or "http://localhost:11434"
+        
+        # New provider keys
+        new_settings["deepgram_api_key"] = (st.session_state.key_staging.get("deepgram_api_key") or "").strip()
+        new_settings["elevenlabs_api_key"] = (st.session_state.key_staging.get("elevenlabs_api_key") or "").strip()
+        new_settings["togetherai_api_key"] = (st.session_state.key_staging.get("togetherai_api_key") or "").strip()
+        new_settings["groq_api_key"] = (st.session_state.key_staging.get("groq_api_key") or "").strip()
+        new_settings["openrouter_api_key"] = (st.session_state.key_staging.get("openrouter_api_key") or "").strip()
+        new_settings["xiaomi_api_key"] = (st.session_state.key_staging.get("xiaomi_api_key") or "").strip()
+
         new_settings["provider"]         = def_provider
         new_settings["default_job_role"] = def_job
         save_settings(new_settings)
@@ -536,7 +815,7 @@ with tab_settings:
 # TAB 4 — IDENTCHECK
 # ═══════════════════════════════════════════════════════════════════
 
-with tab_ident:
+if active_tab == "🪪 Identcheck":
     st.subheader("🪪 Identcheck Vorlage")
     st.markdown(
         "Upload an **ID document, passport scan, or CV** and the AI extracts "
@@ -549,7 +828,8 @@ with tab_ident:
     ic_col_left, ic_col_right = st.columns([1, 2])
 
     with ic_col_left:
-        st.markdown("**⚙️ AI Provider**")
+        st.markdown('<div class="bento-card">', unsafe_allow_html=True)
+        st.markdown('<div class="bento-title">⚙️ AI Configuration</div>', unsafe_allow_html=True)
         ic_provider = st.selectbox(
             "Provider", list(AI_PROVIDERS.keys()), label_visibility="collapsed",
             key="ic_provider",
@@ -646,27 +926,31 @@ with tab_ident:
 
                         st.success("✅ Identity data extracted!")
 
-                        # Show editable fields so user can correct before download
-                        st.markdown("**📋 Extracted Identity Fields** *(review & correct if needed)*")
-                        with st.expander("📄 View / Edit Raw JSON", expanded=False):
-                            st.json(ident_data)
-
+                        # Use Bento Layout for Identity Review
+                        st.markdown('<div class="bento-grid">', unsafe_allow_html=True)
+                        
+                        # Hero Card (Span 8)
+                        st.markdown('<div class="bento-card bento-hero">', unsafe_allow_html=True)
+                        st.markdown('<div class="bento-title">📋 Extracted Identity Fields</div>', unsafe_allow_html=True)
+                        
                         col_f1, col_f2 = st.columns(2)
                         with col_f1:
                             ident_data["full_name"]       = st.text_input("Full Name",        value=ident_data.get("full_name","") or "")
                             ident_data["birth_date"]      = st.text_input("Birth Date",       value=ident_data.get("birth_date","") or "")
                             ident_data["birth_place"]     = st.text_input("Place of Birth",   value=ident_data.get("birth_place","") or "")
                             ident_data["nationality"]     = st.text_input("Nationality",      value=ident_data.get("nationality","") or "")
+                        with col_f2:
                             ident_data["document_type"]   = st.text_input("Document Type",    value=ident_data.get("document_type","") or "")
                             ident_data["document_number"] = st.text_input("Document Number",  value=ident_data.get("document_number","") or "")
-                        with col_f2:
-                            ident_data["document_issue_date"]       = st.text_input("Issue Date",           value=ident_data.get("document_issue_date","") or "")
                             ident_data["document_expiry_date"]      = st.text_input("Expiry Date",           value=ident_data.get("document_expiry_date","") or "")
-                            ident_data["document_issuing_authority"] = st.text_input("Issuing Authority",    value=ident_data.get("document_issuing_authority","") or "")
-                            ident_data["residence_permit_type"]     = st.text_input("Residence Permit Type", value=ident_data.get("residence_permit_type","") or "")
                             ident_data["residence_permit_expiry"]   = st.text_input("Permit Expiry",         value=ident_data.get("residence_permit_expiry","") or "")
-                            ident_data["work_permit"]               = st.text_input("Work Permit",           value=ident_data.get("work_permit","") or "")
-
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # Action Card (Span 4)
+                        st.markdown('<div class="bento-card bento-side">', unsafe_allow_html=True)
+                        st.markdown('<div class="bento-title">💿 Finalize</div>', unsafe_allow_html=True)
+                        
                         # Populate and offer download
                         ic_out_name = f"Identcheck_{Path(ic_doc.name).stem}.docx"
                         ic_out_path = os.path.join(tempfile.gettempdir(), ic_out_name)
@@ -674,12 +958,19 @@ with tab_ident:
 
                         with open(ic_out_path, "rb") as f:
                             st.download_button(
-                                label="⬇️ Download Filled Identcheck Document",
+                                label="⬇️ Download Word",
                                 data=f,
                                 file_name=ic_out_name,
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True,
                             )
+                        
+                        st.divider()
+                        with st.expander("Raw Data", expanded=False):
+                            st.json(ident_data)
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
                     except Exception as e:
                         err_msg = str(e)
                         if "Connection error" in err_msg and "11434" in err_msg:
@@ -695,7 +986,7 @@ LEBEN_JOB_PROFILES = [
     "Klempner", "Maurer", "Zimmermann", "Tischler", "Other",
 ]
 
-with tab_leben:
+if active_tab == "📜 Lebenslauf":
     st.subheader("📋 Lebenslauf Generator — Vorlage-Stil")
     st.markdown(
         "Lade Lebenslauf, Ausweis und weitere Dokumente hoch. "
@@ -762,6 +1053,22 @@ with tab_leben:
         )
 
         st.divider()
+        st.markdown("**📝 Word-Vorlage (Kandidatenprofil)**")
+        ll_tpl_source = st.radio("Vorlage-Quelle", ["Built-in Styling", "Upload now", "Saved templates"], horizontal=True, key="ll_tpl_source")
+        ll_tpl_path = None
+        ll_tpl_file = None
+        
+        if ll_tpl_source == "Saved templates":
+            saved_tpls = list(TEMPLATES_DIR.glob("*.docx"))
+            if saved_tpls:
+                sel = st.selectbox("Vorlage wählen", [f.name for f in saved_tpls], key="ll_tpl_sel")
+                ll_tpl_path = str(TEMPLATES_DIR / sel)
+            else:
+                st.info("No saved templates yet.")
+        elif ll_tpl_source == "Upload now":
+            ll_tpl_file = st.file_uploader("Vorlage (.docx) hochladen", type=["docx"], key="ll_tpl_file")
+
+        st.divider()
         ll_run = st.button(
             "⚡ Lebenslauf generieren", type="primary",
             use_container_width=True,
@@ -772,7 +1079,12 @@ with tab_leben:
         if ll_run:
             ll_api_key = cfg(AI_PROVIDERS[ll_provider]["key_name"])
             is_local   = AI_PROVIDERS[ll_provider]["local"]
-            if not ll_api_key and not is_local:
+            
+            if ll_tpl_source == "Upload now" and ll_tpl_file is None:
+                st.warning("⚠️ Bitte lade eine Word-Vorlage hoch.")
+            elif ll_tpl_source == "Saved templates" and ll_tpl_path is None:
+                st.warning("⚠️ Keine Vorlage ausgewählt.")
+            elif not ll_api_key and not is_local:
                 st.error(f"❌ Kein {ll_provider} API-Key. Bitte im **⚙️ Einstellungen**-Tab eintragen.")
             else:
                 _ll_prog = st.progress(0, text="📂 Dokumente werden eingelesen …")
@@ -781,6 +1093,13 @@ with tab_leben:
                     from pathlib import Path as _Path
 
                     saved_paths: list[str] = []
+
+                    # Save template if uploaded
+                    current_tpl_path = ll_tpl_path
+                    if ll_tpl_file:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+                            tmp.write(ll_tpl_file.getbuffer())
+                            current_tpl_path = tmp.name
 
                     # Save CV files
                     for uf in (ll_cv_files or []):
@@ -806,8 +1125,7 @@ with tab_leben:
                             tmp.write(uf.getbuffer())
                             saved_paths.append(tmp.name)
 
-                    _ll_prog.progress(20, text=f"🤖 KI extrahiert Daten via {ll_provider} …")
-
+                    # Step 2 — AI extraction
                     resolved_api = ll_api_key or ("http://localhost:11434" if is_local else "")
                     ll_data = get_lebenslauf_data(
                         file_paths=saved_paths,
@@ -817,52 +1135,118 @@ with tab_leben:
                         api_key=resolved_api,
                     )
                     
-                    # Auto-save to candidate folder logic depends on name, define name first
+                    # Fix NameError by defining it here
                     ll_cand_name = candidate_name_from_data(ll_data)
                     _add_history(ll_cand_name, ll_provider, ll_model, "Lebenslauf")
 
-                    _ll_prog.progress(70, text="📝 Word-Dokument wird erstellt …")
-
-                    ll_out_name = (
-                        f"Lebenslauf_{ll_data.get('nachname', 'Kandidat')}_"
-                        f"{ll_job_role}.docx"
-                    )
-                    ll_out_path = os.path.join(tempfile.gettempdir(), ll_out_name)
-                    build_lebenslauf_docx(ll_data, job_role=ll_job_role, output_path=ll_out_path)
-
-                    save_candidate_lebenslauf(ll_cand_name, ll_data, ll_out_path)
-
-                    _ll_prog.progress(100, text="✅ Fertig!")
-                    st.success(f"✅ Lebenslauf erstellt & gespeichert unter **👥 Kandidaten → {ll_cand_name}**")
-
-                    with st.expander("📊 Extrahierte Daten anzeigen", expanded=False):
-                        st.json(ll_data)
-
-                    dl_ll1, dl_ll2 = st.columns(2)
-                    with open(ll_out_path, "rb") as f:
-                        dl_ll1.download_button(
-                            label="⬇️ Word-Lebenslauf herunterladen",
-                            data=f,
-                            file_name=ll_out_name,
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True,
-                        )
-                    dl_ll2.download_button(
-                        label="⬇️ JSON exportieren",
-                        data=json.dumps(ll_data, indent=2, ensure_ascii=False),
-                        file_name=f"{ll_data.get('nachname', 'kandidat')}_lebenslauf.json",
-                        mime="application/json",
-                        use_container_width=True,
-                    )
+                    # Store to Buffer for Review in Tab 5
+                    st.session_state.ll_extract_buffer = {
+                        "data": ll_data,
+                        "tpl_path": current_tpl_path,
+                        "job_role": ll_job_role,
+                        "provider": ll_provider,
+                        "model": ll_model,
+                        "cand_name": ll_cand_name,
+                        "status": "ready"
+                    }
+                    st.toast(f"✅ Extraction Successful for {ll_cand_name}!")
 
                 except Exception as e:
-                    err_msg = str(e)
-                    if "Connection error" in err_msg and "11434" in err_msg:
-                        st.error(f"❌ Verbindungsfehler: {ll_provider} unter localhost:11434 ist nicht erreichbar. Läuft Ollama?")
-                    else:
-                        st.error(f"❌ Fehler: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    st.error(f"❌ Error: {e}")
                 finally:
                     _ll_prog.empty()
+
+        # ── 🔍 LEBENSLAUF REVIEW BRIDGE ──────────────────────────────
+        if "ll_extract_buffer" in st.session_state and st.session_state.ll_extract_buffer:
+            ll_buf = st.session_state.ll_extract_buffer
+            ll_ext = ll_buf["data"]
+            
+            st.divider()
+            st.markdown("### 🔍 Profile Review Station")
+            st.caption("Verify and optimize data before generating the custom Word document.")
+
+            ll_col_b1, ll_col_b2 = st.columns([2, 1])
+
+            with ll_col_b1:
+                st.markdown('<div class="bento-card bento-hero">', unsafe_allow_html=True)
+                st.markdown('<div class="bento-title">✨ Hero Details</div>', unsafe_allow_html=True)
+                
+                ll_c1, ll_c2 = st.columns(2)
+                with ll_c1:
+                    ll_def_name = ll_ext.get("name", "") or f"{ll_ext.get('vorname', '')} {ll_ext.get('nachname', '')}".strip()
+                    ll_rev_name = st.text_input("Name", value=ll_def_name, key="ll_rev_name_ext")
+                    ll_rev_dob = st.text_input("Birth Date", value=ll_ext.get("geburtsdatum", ll_ext.get("birth_date", "")), key="ll_rev_dob_ext")
+                with ll_c2:
+                    ll_rev_role = st.text_input("Job Profile", value=ll_ext.get("job_role", ll_buf["job_role"]), key="ll_rev_role_ext")
+                    ll_rev_nat = st.text_input("Nationality", value=ll_ext.get("nationality", ll_ext.get("staatsangehoerigkeit", "")), key="ll_rev_nat_ext")
+                
+                ll_rev_summary = st.text_area("Synthesis", value=ll_ext.get("profile_summary", ll_ext.get("zusammenfassung", "")), height=150, key="ll_rev_summary_ext")
+                
+                # Sync edits to buffer immediately
+                ll_ext["name"] = ll_rev_name
+                if " " in ll_rev_name:
+                    ll_ext["vorname"], ll_ext["nachname"] = ll_rev_name.split(" ", 1)
+                else:
+                    ll_ext["nachname"] = ll_rev_name
+                
+                ll_ext["job_role"] = ll_rev_role
+                ll_ext["nationality"] = ll_rev_nat
+                ll_ext["profile_summary"] = ll_rev_summary
+                ll_ext["birth_date"] = ll_rev_dob
+                # Mirror German
+                ll_ext["zusammenfassung"] = ll_rev_summary
+                ll_ext["geburtsdatum"] = ll_rev_dob
+                ll_ext["staatsangehoerigkeit"] = ll_rev_nat
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            with ll_col_b2:
+                st.markdown('<div class="bento-card">', unsafe_allow_html=True)
+                st.markdown('<div class="bento-title">🚀 Output Factory</div>', unsafe_allow_html=True)
+                
+                st.info(f"AI: **{ll_buf['provider']}**\nMode: `{'Custom Template' if ll_buf['tpl_path'] else 'Built-in'}`")
+
+                if ll_buf["status"] == "ready":
+                    if st.button("✨ Approve & Generate Document", type="primary", use_container_width=True, key="ll_btn_approve"):
+                        try:
+                            # Build output path
+                            ll_out_name = f"Lebenslauf_{ll_ext.get('nachname', 'Kandidat')}_{ll_buf['job_role']}.docx"
+                            ll_out_path = os.path.join(tempfile.gettempdir(), ll_out_name)
+                            
+                            # Populating logic
+                            if ll_buf["tpl_path"]:
+                                populate_template(ll_buf["tpl_path"], ll_out_path, ll_ext)
+                            else:
+                                build_lebenslauf_docx(ll_ext, job_role=ll_buf["job_role"], output_path=ll_out_path)
+                            
+                            # Final candidate sync
+                            save_candidate_lebenslauf(ll_buf["cand_name"], ll_ext, ll_out_path)
+                            
+                            ll_buf["final_path"] = ll_out_path
+                            ll_buf["final_name"] = ll_out_name
+                            ll_buf["status"] = "synced"
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to generate Word: {e}")
+                
+                if ll_buf["status"] == "synced":
+                    st.success("✅ File Ready!")
+                    with open(ll_buf["final_path"], "rb") as f:
+                        st.download_button(
+                            "⬇️ Download Lebenslauf",
+                            data=f,
+                            file_name=ll_buf["final_name"],
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True,
+                            key="ll_btn_dl"
+                        )
+                    if st.button("🔄 New Generation", key="ll_btn_reset"):
+                        st.session_state.ll_extract_buffer = None
+                        st.rerun()
+
+                st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -870,7 +1254,7 @@ with tab_leben:
 # ═══════════════════════════════════════════════════════════════════
 IDENT_TPL_DIR_K = Path(__file__).parent / "ident_templates"
 
-with tab_kand:
+if active_tab == "👥 Candidates":
     st.subheader("👥 Kandidaten — Verwaltung")
     st.markdown(
         "Alle verarbeiteten Kandidaten werden hier gespeichert. "
@@ -1201,413 +1585,6 @@ with tab_kand:
                     st.warning("⚠️ Kein Original-CV vorhanden. Lade einen neuen CV im **🚀 Process CV** Tab hoch.")
 
 
-# ═══════════════════════════════════════════════════════════════════
-# TAB 7 — AI CHAT
-# ═══════════════════════════════════════════════════════════════════
-
-with tab_chat:
-    st.subheader("💬 AI Chat — CV-Assistent")
-    st.caption(
-        "Lade einen CV hoch, bearbeite ihn mit KI, und speichere das Ergebnis "
-        "direkt in einen Kandidaten-Ordner oder fülle ein Word-Template aus."
-    )
-
-    # ── Session state init ────────────────────────────────────
-    if "chat_messages" not in st.session_state:
-        st.session_state.chat_messages = []  # [{role, content}]
-    if "chat_cv_text" not in st.session_state:
-        st.session_state.chat_cv_text = None
-    if "chat_cv_filename" not in st.session_state:
-        st.session_state.chat_cv_filename = None
-    if "chat_last_json" not in st.session_state:
-        st.session_state.chat_last_json = None
-    if "chat_id_text" not in st.session_state:
-        st.session_state.chat_id_text = None
-    if "chat_id_filename" not in st.session_state:
-        st.session_state.chat_id_filename = None
-
-    # ── Sidebar-style config in 4 columns ──────────────────────────
-    chat_cfg_col1, chat_cfg_col2, chat_cfg_col2b, chat_cfg_col3 = st.columns([2, 2, 2, 2])
-
-    with chat_cfg_col1:
-        chat_provider = st.selectbox(
-            "🤖 AI Provider", list(AI_PROVIDERS.keys()), key="chat_provider",
-        )
-        chat_model = st.selectbox(
-            "Model", AI_PROVIDERS[chat_provider]["models"],
-            key="chat_model", index=0,
-        )
-
-    with chat_cfg_col2:
-        st.markdown("**📄 CV hochladen (optional)**")
-        chat_cv_file = st.file_uploader(
-            "CV-Datei", type=["pdf", "docx", "jpg", "jpeg", "png"],
-            key="chat_cv_upload", label_visibility="collapsed",
-        )
-        if chat_cv_file:
-            if st.button("📥 CV laden & analysieren", key="chat_load_cv"):
-                with st.spinner("📄 Lese CV-Datei..."):
-                    try:
-                        suffix = Path(chat_cv_file.name).suffix
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                            tmp.write(chat_cv_file.getbuffer())
-                            tmp_path = tmp.name
-
-                        chat_api_key = cfg(AI_PROVIDERS[chat_provider]["key_name"])
-                        is_local = AI_PROVIDERS[chat_provider]["local"]
-                        resolved_key = chat_api_key or ("http://localhost:11434" if is_local else "")
-
-                        cv_text = extract_text_from_any(
-                            tmp_path, provider=chat_provider,
-                            model=chat_model, api_key=resolved_key,
-                        )
-                        st.session_state.chat_cv_text = cv_text
-                        st.session_state.chat_cv_filename = chat_cv_file.name
-
-                        st.session_state.chat_messages.append({
-                            "role": "assistant",
-                            "content": (
-                                f"📄 **CV geladen:** `{chat_cv_file.name}` "
-                                f"({len(cv_text)} Zeichen extrahiert)\n\n"
-                                "Ich habe den CV-Inhalt gelesen. Du kannst mich jetzt bitten:\n"
-                                "- ❓ Zusammenfassung erstellen\n"
-                                "- ✏️ Informationen ändern/hinzufügen/entfernen\n"
-                                "- 📊 Als JSON exportieren\n"
-                                "- 🔄 Berufserfahrung umstrukturieren\n"
-                                "- 🇞🇪 Auf Deutsch übersetzen\n"
-                                "- 🪹 **Identcheck ausfüllen** (wenn du auch einen Ausweis hochgeladen hast)\n"
-                            ),
-                        })
-                        os.unlink(tmp_path)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Fehler beim Laden: {e}")
-
-    with chat_cfg_col2b:
-        st.markdown("**🪹 Ausweis hochladen (optional)**")
-        chat_id_file = st.file_uploader(
-            "Ausweis / Reisepass", type=["jpg", "jpeg", "png", "pdf"],
-            key="chat_id_upload", label_visibility="collapsed",
-        )
-        if chat_id_file:
-            if st.button("📥 Ausweis laden", key="chat_load_id"):
-                with st.spinner("🪹 Lese Ausweisdokument..."):
-                    try:
-                        suffix = Path(chat_id_file.name).suffix
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                            tmp.write(chat_id_file.getbuffer())
-                            tmp_path_id = tmp.name
-
-                        chat_api_key = cfg(AI_PROVIDERS[chat_provider]["key_name"])
-                        is_local = AI_PROVIDERS[chat_provider]["local"]
-                        resolved_key = chat_api_key or ("http://localhost:11434" if is_local else "")
-
-                        id_text = extract_text_from_any(
-                            tmp_path_id, provider=chat_provider,
-                            model=chat_model, api_key=resolved_key,
-                        )
-                        st.session_state.chat_id_text = id_text
-                        st.session_state.chat_id_filename = chat_id_file.name
-
-                        st.session_state.chat_messages.append({
-                            "role": "assistant",
-                            "content": (
-                                f"🪹 **Ausweis geladen:** `{chat_id_file.name}`\n\n"
-                                "Ich habe das Dokument gelesen. Du kannst mir nun sagen:\n"
-                                "- 📝 **Identcheck ausfüllen** — ich extrahiere Geburtsort, Ablaufdatum, "
-                                "Dokumentnummer und fülle das Vorlage-Dokument automatisch aus.\n"
-                                "- ❓ Was steht im Ausweis? — ich fasse Felder zusammen.\n"
-                            ),
-                        })
-                        os.unlink(tmp_path_id)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Fehler beim Laden des Ausweises: {e}")
-
-    with chat_cfg_col3:
-        st.markdown("**⚙️ Chat-Aktionen**")
-        if st.button("🗑️ Chat löschen", key="chat_clear", use_container_width=True):
-            st.session_state.chat_messages = []
-            st.session_state.chat_cv_text = None
-            st.session_state.chat_cv_filename = None
-            st.session_state.chat_last_json = None
-            st.session_state.chat_id_text = None
-            st.session_state.chat_id_filename = None
-            st.rerun()
-
-        if st.session_state.chat_cv_text:
-            st.success(f"📄 CV: `{st.session_state.chat_cv_filename}`")
-        if st.session_state.chat_id_text:
-            st.success(f"🪹 Ausweis: `{st.session_state.chat_id_filename}`")
-        if st.session_state.chat_last_json:
-            st.info("📊 JSON-Daten verfügbar — siehe unten.")
-
-
-    st.divider()
-
-    # ── Chat display area ─────────────────────────────────────────────
-    chat_container = st.container(height=500)
-
-    with chat_container:
-        if not st.session_state.chat_messages:
-            st.markdown(
-                "👋 **Willkommen im AI Chat!**\n\n"
-                "Hier kannst du:\n"
-                "1. 📄 Einen CV hochladen (oben)\n"
-                "2. 💬 Der KI sagen, was sie ändern soll\n"
-                "3. 💾 Das Ergebnis als Kandidat speichern\n"
-                "4. 📄 In ein Word-Template einfügen\n\n"
-                "*Beispiel:* \"Entferne die ältesten Berufserfahrungen und "
-                "füge Schweißer-Zertifikate hinzu\""
-            )
-        else:
-            for msg in st.session_state.chat_messages:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
-
-    # ── Chat input ─────────────────────────────────────────────────
-    user_input = st.chat_input(
-        "Schreibe deine Anweisung... z.B. 'Erstelle eine Zusammenfassung' oder 'Export als JSON'",
-        key="chat_input",
-    )
-
-    if user_input:
-        # ── Auto-load pending files if not yet loaded ────────────────
-        chat_api_key = cfg(AI_PROVIDERS[chat_provider]["key_name"])
-        is_local = AI_PROVIDERS[chat_provider]["local"]
-        resolved_key = chat_api_key or ("http://localhost:11434" if is_local else "")
-
-        # Auto-load CV
-        if chat_cv_file and (not st.session_state.chat_cv_text or chat_cv_file.name != st.session_state.get("chat_cv_filename")):
-            with st.spinner(f"📄 Auto-Lade CV: {chat_cv_file.name}..."):
-                try:
-                    suffix = Path(chat_cv_file.name).suffix
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                        tmp.write(chat_cv_file.getbuffer())
-                        tmp_path = tmp.name
-                    cv_text = extract_text_from_any(tmp_path, provider=chat_provider, model=chat_model, api_key=resolved_key)
-                    st.session_state.chat_cv_text = cv_text
-                    st.session_state.chat_cv_filename = chat_cv_file.name
-                    os.unlink(tmp_path)
-                except Exception as e:
-                    st.error(f"❌ Auto-Load CV Fehler: {e}")
-
-        # Auto-load ID
-        if chat_id_file and (not st.session_state.chat_id_text or chat_id_file.name != st.session_state.get("chat_id_filename")):
-            with st.spinner(f"🪹 Auto-Lade Ausweis: {chat_id_file.name}..."):
-                try:
-                    suffix = Path(chat_id_file.name).suffix
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                        tmp.write(chat_id_file.getbuffer())
-                        tmp_path_id = tmp.name
-                    id_text = extract_text_from_any(tmp_path_id, provider=chat_provider, model=chat_model, api_key=resolved_key)
-                    st.session_state.chat_id_text = id_text
-                    st.session_state.chat_id_filename = chat_id_file.name
-                    os.unlink(tmp_path_id)
-                except Exception as e:
-                    st.error(f"❌ Auto-Load Ausweis Fehler: {e}")
-
-        # Add user message
-        st.session_state.chat_messages.append({"role": "user", "content": user_input})
-
-        # Build full messages with context
-        full_messages = build_chat_messages(
-            st.session_state.chat_messages,
-            cv_text=st.session_state.chat_cv_text,
-            id_text=st.session_state.chat_id_text,
-        )
-
-        # Get AI response
-
-        if not resolved_key and not is_local:
-            st.session_state.chat_messages.append({
-                "role": "assistant",
-                "content": f"❌ Kein API-Key für **{chat_provider}** gesetzt. Bitte im **⚙️ Settings** Tab eintragen.",
-            })
-        else:
-            try:
-                response = send_chat_message(
-                    full_messages, chat_provider, chat_model, resolved_key,
-                )
-
-                st.session_state.chat_messages.append({
-                    "role": "assistant",
-                    "content": response,
-                })
-
-                # Try to extract JSON from response
-                extracted_json = extract_json_from_response(response)
-                if extracted_json:
-                    st.session_state.chat_last_json = extracted_json
-
-            except Exception as e:
-                st.session_state.chat_messages.append({
-                    "role": "assistant",
-                    "content": f"❌ **Fehler:** {e}",
-                })
-
-        st.rerun()
-
-    # ── Actions bar (save to candidate, process to template) ───────────
-    if st.session_state.chat_last_json:
-        st.divider()
-        st.markdown("### 💾 Ergebnis speichern")
-
-        act_col1, act_col2, act_col3 = st.columns(3)
-
-        with act_col1:
-            st.markdown("**📊 Extrahierte JSON-Daten:**")
-            with st.expander("JSON anzeigen", expanded=False):
-                st.json(st.session_state.chat_last_json)
-
-            st.download_button(
-                "⬇️ JSON exportieren",
-                data=json.dumps(st.session_state.chat_last_json, indent=2, ensure_ascii=False),
-                file_name="chat_cv_data.json",
-                mime="application/json", use_container_width=True,
-            )
-
-        with act_col2:
-            st.markdown("**👥 Als Kandidat speichern:**")
-            chat_cand_name = candidate_name_from_data(st.session_state.chat_last_json)
-            st.text_input("Kandidaten-Name", value=chat_cand_name, key="chat_cand_name_input")
-
-            if st.button("💾 Kandidat speichern", type="primary", use_container_width=True, key="chat_save_cand"):
-                cname = st.session_state.get("chat_cand_name_input", chat_cand_name)
-                cv_bytes = b""
-                cv_fname = "chat_cv.txt"
-                if st.session_state.chat_cv_text:
-                    cv_bytes = st.session_state.chat_cv_text.encode("utf-8")
-                    cv_fname = st.session_state.chat_cv_filename or "chat_cv.txt"
-
-                save_candidate_cv(
-                    cname, cv_bytes, cv_fname,
-                    st.session_state.chat_last_json, None,
-                )
-                st.success(f"✅ Gespeichert unter **👥 Kandidaten → {cname}**")
-
-        with act_col3:
-            st.markdown("**📄 In Word-Template einfügen:**")
-            chat_saved_tpls = list(TEMPLATES_DIR.glob("*.docx"))
-            if chat_saved_tpls:
-                chat_tpl_sel = st.selectbox(
-                    "Template", [f.name for f in chat_saved_tpls],
-                    key="chat_tpl_select", label_visibility="collapsed",
-                )
-                chat_tpl_path = TEMPLATES_DIR / chat_tpl_sel
-
-                if st.button("📄 Template ausfüllen", type="primary", use_container_width=True, key="chat_fill_tpl"):
-                    try:
-                        out_name = f"Chat_Populated_{chat_cand_name}.docx"
-                        out_path = os.path.join(tempfile.gettempdir(), out_name)
-                        populate_template(str(chat_tpl_path), out_path, st.session_state.chat_last_json)
-
-                        # Also save to candidate folder
-                        cname = st.session_state.get("chat_cand_name_input", chat_cand_name)
-                        cv_bytes = (st.session_state.chat_cv_text or "").encode("utf-8")
-                        cv_fname = st.session_state.chat_cv_filename or "chat_cv.txt"
-                        save_candidate_cv(
-                            cname, cv_bytes, cv_fname,
-                            st.session_state.chat_last_json, out_path,
-                        )
-
-                        st.success(f"✅ Template ausgefüllt & gespeichert unter **{cname}**")
-                        with open(out_path, "rb") as f:
-                            st.download_button(
-                                "⬇️ Word-Dokument herunterladen",
-                                data=f, file_name=out_name,
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                use_container_width=True, key="chat_dl_doc",
-                            )
-                    except Exception as e:
-                        st.error(f"❌ Fehler: {e}")
-            else:
-                st.warning("⚠️ Kein Template vorhanden. Lade eines im **📁 Templates** Tab hoch.")
-
-        # ── Identcheck ausfüllen ───────────────────────────────────────
-        if st.session_state.chat_id_text or st.session_state.chat_cv_text:
-            st.divider()
-            st.markdown("### 🪹 Identcheck aus Ausweis ausfüllen")
-
-            IDENT_TPL_DIR_CHAT = Path(__file__).parent / "ident_templates"
-            ident_tpls = list(IDENT_TPL_DIR_CHAT.glob("*.docx")) if IDENT_TPL_DIR_CHAT.exists() else []
-
-            if not ident_tpls:
-                st.warning("⚠️ Kein Identcheck-Template vorhanden. Lade eines im **🪹 Identcheck** Tab hoch.")
-            else:
-                ic_col1, ic_col2 = st.columns(2)
-                with ic_col1:
-                    ic_tpl_name = st.selectbox(
-                        "Identcheck-Template", [t.name for t in ident_tpls],
-                        key="chat_ic_tpl",
-                    )
-                    ic_tpl_path = IDENT_TPL_DIR_CHAT / ic_tpl_name
-
-                with ic_col2:
-                    st.caption("Die KI extrahiert Geburtsort, Ablaufdatum und Dokumentnummer aus dem Ausweis.")
-
-                if st.button(
-                    "🪹 Identcheck jetzt ausfüllen",
-                    type="primary", use_container_width=True, key="chat_ic_run",
-                ):
-                    with st.spinner("🪹 Extrahiere Identcheck-Daten via AI..."):
-                        try:
-                            from extractor import get_identity_data
-
-                            chat_api_key = cfg(AI_PROVIDERS[chat_provider]["key_name"])
-                            is_local = AI_PROVIDERS[chat_provider]["local"]
-                            resolved_key = chat_api_key or ("http://localhost:11434" if is_local else "")
-
-                            # Use ID scan if available, fall back to CV
-                            if st.session_state.chat_id_text:
-                                # Write the already-extracted text to a temp file for identity
-                                # Instead: call the AI directly with the id_text
-                                ic_prompt_msgs = build_chat_messages(
-                                    [{
-                                        "role": "user",
-                                        "content": "Erstelle jetzt den vollständigen Identcheck als JSON gemäß dem Schema aus deinen Anweisungen.",
-                                    }],
-                                    cv_text=st.session_state.chat_cv_text,
-                                    id_text=st.session_state.chat_id_text,
-                                )
-                            else:
-                                ic_prompt_msgs = build_chat_messages(
-                                    [{
-                                        "role": "user",
-                                        "content": "Erstelle jetzt den vollständigen Identcheck als JSON gemäß dem Schema aus deinen Anweisungen.",
-                                    }],
-                                    cv_text=st.session_state.chat_cv_text,
-                                )
-
-                            ic_response = send_chat_message(
-                                ic_prompt_msgs, chat_provider, chat_model, resolved_key,
-                            )
-                            ident_data = extract_json_from_response(ic_response)
-
-                            if not ident_data:
-                                st.error("❌ KI hat kein gültiges JSON zurückgegeben. Bitte überprüfe den hochgeladenen Ausweis.")
-                            else:
-                                # Fill template
-                                ic_out_path = os.path.join(
-                                    tempfile.gettempdir(), "Identcheck_Chat_Filled.docx"
-                                )
-                                populate_template(str(ic_tpl_path), ic_out_path, ident_data)
-
-                                st.success("✅ Identcheck erfolgreich ausgefüllt!")
-                                with st.expander("📊 Identcheck-Daten anzeigen", expanded=False):
-                                    st.json(ident_data)
-
-                                with open(ic_out_path, "rb") as f:
-                                    st.download_button(
-                                        "⬇️ Identcheck herunterladen",
-                                        data=f,
-                                        file_name="Identcheck_Filled.docx",
-                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                        use_container_width=True,
-                                        key="chat_ic_dl",
-                                    )
-                        except Exception as e:
-                            st.error(f"❌ Fehler beim Identcheck: {e}")
-
+# Sidebar Assistant covers chat now.
 st.markdown("---")
 st.caption("Built with ❤️ using OpenAI · Gemini · Anthropic · Mistral · DeepSeek · Grok · Kimi · Qwen · Ollama and Streamlit")

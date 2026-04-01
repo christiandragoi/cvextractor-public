@@ -1,0 +1,185 @@
+{
+  "anrede": "Herr",
+  "vorname": "Paluch,",
+  "nachname": "Dariusz",
+  "geburtsdatum": "31.07.1968",
+  "geburtsort": "Iława, Polen",
+  "staatsangehoerigkeit": "Polnisch",
+  "berufserfahrung": [
+    {
+      "von": "02/2020",
+      "bis": "present",
+      "arbeitgeber": "PRIVATE COMPANY, Polen",
+      "ort_land": "Polen",
+      "position": "Schweißer",
+      "taetigkeiten": "Schweißen mit 111, 135, 136 und 141 an Kohlenstoffstahl und Edelstahl, Arbeiten an Konstruktionen, Anlagen und Bauteilen mit Wandstärken von 5–40 mm nach technischen Zeichnungen."
+    },
+    {
+      "von": "03/2019",
+      "bis": "11/2020",
+      "arbeitgeber": "GAWA ELBLĄG, Polen",
+      "ort_land": "Polen",
+      "position": "Schlosser / Schweißer",
+      "taetigkeiten": "Schweißen von Stahlkonstruktionen mit 111 und 135/136, Metallbauarbeiten und Fertigung industrieller Bauteile nach technischen Vorgaben."
+    },
+    {
+      "von": "04/2017",
+      "bis": "09/2019",
+      "arbeitgeber": "Diverse Projekte",
+      "ort_land": "Polen",
+      "position": "Baggerfahrer",
+      "taetigkeiten": "Bedienung von Baumaschinen im Tiefbau, Erdarbeiten und Materialbewegung."
+    },
+    {
+      "von": "01/2012",
+      "bis": "08/2012",
+      "arbeitgeber": "LOYD HOLANDIA, Niederlande",
+      "ort_land": "Niederlande",
+      "position": "Aluminium-Schweißer",
+      "taetigkeiten": "MIG-Schweißen (131) von Aluminiumkonstruktionen, Fertigung präziser Bauteile nach Zeichnung."
+    },
+    {
+      "von": "09/2012",
+      "bis": "03/2017",
+      "arbeitgeber": "Zeitpuffer / Projektpause / Transporttätigkeit",
+      "ort_land": "Niederlande",
+      "position": "Tätigkeit im Transportwesen und Logistik",
+      "taetigkeiten": "Tätigkeit im Transportwesen und Logistik."
+    },
+    {
+      "von": "02/2007",
+      "bis": "12/2009",
+      "arbeitgeber": "ALUSHIP TECHNOLOGY, Niederlande",
+      "ort_land": "Niederlande",
+      "position": "Aluminium-Yacht-Schweißer",
+      "taetigkeiten": "Schweißen von Aluminium-Yachten mit 141 und 131, präzise Arbeiten an Aluminiumlegierungen nach internationalen Standards."
+    },
+    {
+      "von": "06/2005",
+      "bis": "01/2007",
+      "arbeitgeber": "DEC/GTAX OSTRODA, Polen",
+      "ort_land": "Polen",
+      "position": "Schweißer",
+      "taetigkeiten": "MAG/MIG-Schweißen (135/136) von Gaswaggon-Rahmen, Arbeiten nach technischen Zeichnungen."
+    },
+    {
+      "von": "03/2000",
+      "bis": "05/2005",
+      "arbeitgeber": "MONTSPAW SERVICE GDANSK, Polen",
+      "ort_land": "Polen",
+      "position": "Schweißer",
+      "taetigkeiten": "MAG-Schweißen von Tanks, Druckbehältern und Rohrleitungen aus Kohlenstoffstahl bis 50 mm Wandstärke."
+    },
+    {
+      "von": "07/1998",
+      "bis": "02/2000",
+      "arbeitgeber": "STOCZNIA CRIST GDANSK, Polen",
+      "ort_land": "Polen",
+      "position": "Schlosser / Schweißer",
+      "taetigkeiten": "Schweißarbeiten im Schiffbau, Herstellung und Montage von Stahlkonstruktionen nach Zeichnung."
+    },
+    {
+      "von": "04/1996",
+      "bis": "06/1998",
+      "arbeitgeber": "MARITIM GDANSK, Polen",
+      "ort_land": "Polen",
+      "position": "Schlosser / Schweißer",
+      "taetigkeiten": "Schweißen und Montage von Schiffbaukomponenten mit 111 und 135/136."
+    },
+    {
+      "von": "01/1988",
+      "bis": "03/1991",
+      "arbeitgeber": "ELZAM ELBLĄG, Polen",
+      "ort_land": "Polen",
+      "position": "Schlosser / Schweißer",
+      "taetigkeiten": "Metallbau, Herstellung von Stahlkonstruktionen, Toren und Geländern."
+    }
+  ],
+  "bildung": [
+    {
+      "jahre": "1983-1988",
+      "einrichtung": "Zespół Szkół Zawodowych w Iławie, Polen",
+      "abschluss": "Berufsausbildung Metallbearbeitung / Schweißtechnik"
+    }
+  ],
+  "weiterbildung": [
+    {
+      "jahre": "Diverse",
+      "anbieter": "Diverse Schweißkurse",
+      "kurs": "Verfahren: 111, 131, 135, 136, 138, 141"
+    }
+  ],
+  "zertifikate": [
+    {
+      "bezeichnung": "Schweißzertifikate (verschiedene Verfahren und Materialien)",
+      "ausgestellt": null,
+      "gueltig_bis": null
+    }
+  ],
+  "sprachen": [
+    {
+      "sprache": "Polnisch",
+      "niveau": "Muttersprache"
+    },
+    {
+      "sprache": "Deutsch",
+      "niveau": "B1"
+    },
+    {
+      "sprache": "Englisch",
+      "niveau": "A2"
+    }
+  ],
+  "faehigkeiten": [
+    {
+      "name": "Handwerkliches Geschick",
+      "beschreibung": "Expert"
+    },
+    {
+      "name": "Installation",
+      "beschreibung": "Advanced"
+    },
+    {
+      "name": "Demontage",
+      "beschreibung": "Advanced"
+    },
+    {
+      "name": "Blechbearbeitung",
+      "beschreibung": "Advanced"
+    },
+    {
+      "name": "Montieren von Stahlkonstruktionen",
+      "beschreibung": "Expert"
+    },
+    {
+      "name": "Sägen / Schleifen / Schrauben",
+      "beschreibung": "Expert"
+    },
+    {
+      "name": "Bohren",
+      "beschreibung": "Advanced"
+    },
+    {
+      "name": "Schweißarbeiten frei Hand",
+      "beschreibung": "Expert"
+    },
+    {
+      "name": "Schweißarbeiten mit Schweißroboter",
+      "beschreibung": "Basic"
+    },
+    {
+      "name": "MAG Schweißen",
+      "beschreibung": "Expert"
+    },
+    {
+      "name": "WIG Schweißen",
+      "beschreibung": "Advanced"
+    }
+  ],
+  "zusammenfassung": "Dariusz Paluch verfügt über mehr als 30 Jahre Berufserfahrung als Schweißer und Schlosser. Er hat in Polen und den Niederlanden gearbeitet und ist in der Lage, technische Zeichnungen und Schweißpläne zu lesen und umzusetzen. Er fertigt Stahl- und Aluminiumkonstruktionen und ist bekannt für seine Flexibilität und Belastbarkeit. Mit einem Führerschein ausgestattet, kann er auch Baumaschinen bedienen. Herr Paluch ist sofort für Werkstatt- und Montageeinsätze verfügbar und hat direkte Erfahrung im Anlagen- und Schiffbau. Er pflegt eine lösungsorientierte Arbeitsweise, was ihn zu einem wertvollen Teammitglied in dynamischen und internationalen Umgebungen macht.",
+  "job_role": "Schweißer",
+  "name": "Paluch, Dariusz",
+  "email": "",
+  "nationality": "Polnisch",
+  "profile_summary": "Dariusz Paluch verfügt über mehr als 30 Jahre Berufserfahrung als Schweißer und Schlosser. Er hat in Polen und den Niederlanden gearbeitet und ist in der Lage, technische Zeichnungen und Schweißpläne zu lesen und umzusetzen. Er fertigt Stahl- und Aluminiumkonstruktionen und ist bekannt für seine Flexibilität und Belastbarkeit. Mit einem Führerschein ausgestattet, kann er auch Baumaschinen bedienen. Herr Paluch ist sofort für Werkstatt- und Montageeinsätze verfügbar und hat direkte Erfahrung im Anlagen- und Schiffbau. Er pflegt eine lösungsorientierte Arbeitsweise, was ihn zu einem wertvollen Teammitglied in dynamischen und internationalen Umgebungen macht."
+}

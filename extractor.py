@@ -293,8 +293,12 @@ def _call_gemini(text: str, model: str, api_key: str) -> dict:
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=api_key)
+    # The new google-genai SDK handles model names directly (e.g. 'gemini-1.5-flash')
+    # but some legacy keys or specific environments might still expect 'models/' prefix.
+    # However, 'gemini-1.5-pro' is generally the correct alias.
+    actual_model = model or "gemini-1.5-flash"
     resp = client.models.generate_content(
-        model=model,
+        model=actual_model,
         contents=SYSTEM_MSG + "\n\n" + build_prompt(text),
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -306,9 +310,11 @@ def _call_gemini(text: str, model: str, api_key: str) -> dict:
 def _call_anthropic(text: str, model: str, api_key: str) -> dict:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
+    # Fix: Use Claude-3-5-sonnet-latest by default and increase max_tokens
+    actual_model = model or "claude-3-5-sonnet-latest"
     msg = client.messages.create(
-        model=model,
-        max_tokens=4096,   # IMPORTANT: was 1024, too small for a full CV
+        model=actual_model,
+        max_tokens=4096,   
         system=SYSTEM_MSG,
         messages=[{"role": "user", "content": build_prompt(text)}],
     )
@@ -330,7 +336,7 @@ def _call_mistral(text: str, model: str, api_key: str) -> dict:
 
 
 def _call_deepseek(text: str, model: str, api_key: str) -> dict:
-    return _openai_compat(text, model, api_key, "https://api.deepseek.com/v1")
+    return _openai_compat(text, model, api_key, "https://api.deepseek.com")
 
 
 def _call_grok(text: str, model: str, api_key: str) -> dict:
@@ -354,19 +360,40 @@ def _call_ollama(text: str, model: str, api_key: str) -> dict:
     return _openai_compat(text, model, "ollama", f"{host}/v1")
 
 
+def _call_together(text: str, model: str, api_key: str) -> dict:
+    return _openai_compat(text, model, api_key, "https://api.together.xyz/v1")
+
+
+def _call_groq(text: str, model: str, api_key: str) -> dict:
+    return _openai_compat(text, model, api_key, "https://api.groq.com/openai/v1")
+
+
+def _call_openrouter(text: str, model: str, api_key: str) -> dict:
+    return _openai_compat(text, model, api_key, "https://openrouter.ai/api/v1")
+
+
+def _call_xiaomi(text: str, model: str, api_key: str) -> dict:
+    # Defaulting to xiaomimimo.com based on research
+    return _openai_compat(text, model, api_key, "https://api.xiaomimimo.com/v1")
+
+
 # ── Dispatch table ────────────────────────────────────────────────────────────
 
 DISPATCH = {
-    "OpenAI":     _call_openai,
-    "Gemini":     _call_gemini,
-    "Anthropic":  _call_anthropic,
-    "Mistral":    _call_mistral,
-    "DeepSeek":   _call_deepseek,
-    "Grok (xAI)": _call_grok,
-    "Kimi K2":    _call_kimi,
-    "Qwen":       _call_qwen,
-    "Perplexity": _call_perplexity,
-    "Ollama":     _call_ollama,
+    "OpenAI":      _call_openai,
+    "Gemini":      _call_gemini,
+    "Anthropic":   _call_anthropic,
+    "Mistral":     _call_mistral,
+    "DeepSeek":    _call_deepseek,
+    "Grok (xAI)":  _call_grok,
+    "Kimi K2":     _call_kimi,
+    "Qwen":        _call_qwen,
+    "Perplexity":  _call_perplexity,
+    "Ollama":      _call_ollama,
+    "TogetherAI":  _call_together,
+    "Groq":        _call_groq,
+    "OpenRouter":  _call_openrouter,
+    "Xiaomi MiMo": _call_xiaomi,
 }
 
 
@@ -755,24 +782,27 @@ def validate_key(provider: str, api_key: str, model: str = "") -> tuple[bool, st
         if provider == "Gemini":
             from google import genai
             client = genai.Client(api_key=api_key)
-            # Ask for a tiny response
+            # Try explicit prefix 'models/' as some environments for this SDK seem to require it
+            val_model = model or "models/gemini-2.0-flash"
             resp = client.models.generate_content(
-                model=model or "gemini-2.0-flash",
+                model=val_model,
                 contents="Say OK",
             )
             _ = resp.text
-            return True, "✅ Key is valid"
+            return True, f"✅ Key is valid ({val_model})"
 
         elif provider == "Anthropic":
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
+            # Some keys don't have access to latest Sonnet, try Haiku
+            val_model = model or "claude-3-haiku-20240307"
             msg = client.messages.create(
-                model=model or "claude-3-haiku-20240307",
+                model=val_model,
                 max_tokens=5,
                 messages=[{"role": "user", "content": "Say OK"}],
             )
             _ = msg.content[0].text
-            return True, "✅ Key is valid"
+            return True, f"✅ Key is valid ({val_model})"
 
         elif provider == "Mistral":
             from openai import OpenAI
@@ -788,26 +818,54 @@ def validate_key(provider: str, api_key: str, model: str = "") -> tuple[bool, st
             return True, "✅ Ollama reachable"
 
         else:
-            # OpenAI-compatible: OpenAI, DeepSeek, Grok, Kimi, Qwen, Perplexity
+            # OpenAI-compatible: OpenAI, DeepSeek, Grok, Kimi, Qwen, Perplexity, OpenRouter, TogetherAI, Groq
             BASE_URLS = {
                 "OpenAI":     "https://api.openai.com/v1",
-                "DeepSeek":   "https://api.deepseek.com/v1",
+                "DeepSeek":   "https://api.deepseek.com",  # Removed /v1
                 "Grok (xAI)": "https://api.x.ai/v1",
                 "Kimi K2":    "https://api.moonshot.cn/v1",
                 "Qwen":       "https://dashscope.aliyuncs.com/compatible-mode/v1",
                 "Perplexity": "https://api.perplexity.ai",
+                "OpenRouter": "https://openrouter.ai/api/v1",
+                "TogetherAI": "https://api.together.xyz/v1",
+                "Groq":       "https://api.groq.com/openai/v1",
+                "Xiaomi MiMo":"https://api.xiaomimimo.com/v1",
             }
             from openai import OpenAI
             base_url = BASE_URLS.get(provider, "https://api.openai.com/v1")
             client = OpenAI(api_key=api_key, base_url=base_url)
+            
+            # Special case for Perplexity / TogetherAI
+            if provider == "Perplexity":
+                client.chat.completions.create(
+                    model="sonar",
+                    messages=[{"role": "user", "content": "Say OK"}],
+                    max_tokens=5
+                )
+                return True, "✅ Key is valid (Completion test)"
+            
+            if provider == "TogetherAI":
+                client.chat.completions.create(
+                    model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                    messages=[{"role": "user", "content": "Say OK"}],
+                    max_tokens=5
+                )
+                return True, "✅ Key is valid (Completion test)"
+
+            # Standard validation
             models_list = client.models.list()
             return True, f"✅ Key is valid ({len(list(models_list.data))} models)"
 
     except Exception as e:
         msg = str(e)
-        if "401" in msg or "authentication" in msg.lower() or "invalid" in msg.lower():
-            return False, f"❌ Invalid key: {msg[:120]}"
-        return False, f"❌ Error: {msg[:120]}"
+        # Better masking of errors
+        if "401" in msg or "authentication" in msg.lower() or "invalid_api_key" in msg.lower():
+            return False, f"❌ Invalid key (401)"
+        if "404" in msg:
+            return False, f"❌ Model not found (404). Check model name."
+        if "403" in msg:
+            return False, f"❌ Permission denied (403). Check account balance/access."
+        return False, f"❌ Error: {msg[:100]}..."
 
 
 if __name__ == "__main__":

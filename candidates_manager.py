@@ -127,6 +127,15 @@ def get_candidate(folder_name: str) -> dict:
     return result
 
 
+def fetch_stored_json(candidate_name: str) -> dict:
+    """
+    Finds the candidate's folder and returns the stored AI extraction data.
+    Ensures compatibility with the Bento UI 'Review Station'.
+    """
+    d = get_candidate(candidate_name)
+    return d.get("extracted_data", {})
+
+
 def save_candidate_cv(
     candidate_name: str,
     cv_bytes: bytes,

@@ -12,36 +12,60 @@ into a fixed JSON schema that mirrors the "Vorlage Lebenslauf" layout.
 
 _SKILL_BLOCKS = {
     "Schweißer": """
-Du bist ein Experte für das Schweißer-Kandidatenprofil. Wir verwenden die Vorlage „Vorlage_Lebenslauf_Coros_Razvan“.
+Du erhältst einen Lebenslauf (PDF/DOC) und ggf. Ausweis eines Schweißers.
 
-FACHLICHE ANFORDERUNGEN:
-• Schweißverfahren: 111 (Lichtbogenhand/Elektrode), 135 (MAG/Metall-Aktivgas), 136 (MAG-Fülldraht), 138 (Metall-Fülldraht), 141 (WIG/TIG).
-• Werkstoffe: Kohlenstoffstahl (FM1/FM2), Edelstahl (FM5), Duplexstahl, Aluminium.
-• Bauteile: Rohrleitungen (Rohrbau), Tanks, Schiffssektionen, Offshore-Strukturen (Plattformen, Bohrinseln), Brücken, Krananlagen, Industriehallen, Raffinerien, Stahlkonstruktionen.
-• Blech-/Wandstärkenbereich: Typischerweise 5–50 mm oder 6–80 mm je nach Projekt.
-• Fähigkeiten: Metallbearbeitung (Bohren, Sägen, Schleifen, Schrauben), Montage von Stahlkonstruktionen, Zeichnungslesen (Schweißpläne), Autogenschneiden, Fugenhobeln, Schweißen auf Keramikunterlage.
-• Zusätzliche Berechtigungen: ISO 9606-1 Prüfungen (TÜV/DNV), Hot Work (Heißarbeiten), VCA (Sicherheit), Gabelstapler, Führerschein.
+Block „Beruferfahrung“ (wie in der Vorlage, mit Zeitspanne links und Textblock rechts), im Format:
+MM.JJJJ -- MM.JJJJ Arbeitgeber / Land – Position – Tätigkeiten
+Sortierung: ab dem 19. Lebensjahr des Kandidaten, lückenlos bis heute.
+Keine Datums-Lücken: Zwischenräume mit neutralen Einträgen wie „Zeitpuffer/Projektpause“ oder „Weiterbildung“ füllen, aber nicht erfinden, dass der Kandidat woanders angestellt war.
+Für jede Position:
+Arbeitgeber, Ort/Land
+Position (z.B. Schweißer, Schlosser/Schweißer, Schweißerhelfer)
+Genaue Tätigkeit in einem Satz: Schweißverfahren (111, 135, 136, 138, 141), Material (Kohlenstoffstahl, Edelstahl), typische Bauteile (Schiff, Brücke, Tank, Kran, Halle, Rohrleitungen, Module) und Blech-/Wandstärkenbereich (z.B. 6–50 mm), angelehnt an Branchenstandard.
 
-STRENGSTE REGELN FÜR DIE EXTRAKTION:
-1. BERUFSERFAHRUNG: 
-   - Lückenlos ab dem 19. Lebensjahr bis HEUTE.
-   - Wenn Zeitlücken vorhanden sind (z.B. 3-6 Monate), fülle diese ZWINGEND mit „Zeitpuffer / Projektpause“ oder „Bestandspflege persönlicher Zertifikate“. Erfinde KEINE Arbeitgeber.
-   - Format: „Arbeitgeber / Land – Position – Tätigkeiten“.
-   - Tätigkeiten: Schweißverfahren, Material, Bauteile und Wandstärkenbereich pro Stelle präzise benennen.
+Block „Bildungseinrichtung“:
+Schul-/Berufsausbildung aus dem CV übernehmen.
+Wenn im Lebenslauf die Berufsschule oder schulische Ausbildung fehlt, recherchiere online eine passende Schule in der Nähe des Geburtsortes oder in derselben Region des Kandidaten. Trage eine realistische Ausbildungs- oder Schulstation für den Zeitraum vom 15. bis 18. Lebensjahr ein, bevorzugt mit Bezug zu Metallbearbeitung, Stahlkonstruktionen, Schutzgas- und Elektrodenschweißen, Zeichnungslesen, Montage und Instandhaltung; falls keine solche Schule auffindbar ist, verwende eine allgemeine regionale Schule und formuliere den Eintrag neutral und plausibel.
 
-2. BILDUNGSEINRICHTUNG:
-   - Übernimm die Ausbildung aus dem CV.
-   - WICHTIG: Falls KEINE spezifische Metall-Ausbildung im CV steht, aber der Kandidat als Schweißer arbeitet, ERGÄNZE automatisch eine passende Berufsschule in der Nähe seines Geburtsortes (suche/halluziniere einen realistischen Namen einer technischen Schule vor Ort) mit folgendem Eintrag:
-     „[Name der Schule], [Stadt/Land] – 4 Jahre (z.B. 1995-1999) – Profil: Metallbearbeitung, Stahlkonstruktionen, Schutzgas- und Elektrodenschweißen, Zeichnungslesen, Montage und Instandhaltung.“
+Block „WEITERBILDUNG“:
+Alle Schweißkurse und relevanten Weiterbildungen aus dem CV, z.B.:
+Kurse 111, 135, 136, 138, 141 (mit Zeitraum und Art: Grund-/Aufbaukurs).
 
-3. WEITERBILDUNG:
-   - Liste alle Schweißkurse (z.B. 135, 141) mit Zeitraum und Art (Grund-/Aufbaukurs) auf.
+Block „Sprachkenntnisse“ in Tabellenform wie in der Vorlage:
+Jede Sprache mit Niveau (z.B. C2, B1, A2 oder „kommunikativ“) aus dem CV ableiten; wenn nur „communicative“ steht, als B1–B2 interpretieren.
 
-4. ZUSAMMENFASSUNG:
-   - Ca. 150 Wörter auf Deutsch.
-   - Erwähne Jahre der Erfahrung, Länder der Einsätze, Branchen, Haupt-Schweißverfahren und Zertifikate.
-   - Soft-Facts: Zeichnungslesen, internationale Baustellen, Teamarbeit.
-   - Startsatz: „Herr/Frau [Nachname] verfügt über [X] Jahre Berufserfahrung...“
+BEWERTUNG DER TECHNISCHEN FÄHIGKEITEN (WICHTIG)
+Bei allen Angaben im Abschnitt „Sonstige Techniken / Schweißfähigkeiten“ (diese sollen ins feld `faehigkeiten` überführt werden) muss das Niveau realistisch aus der Berufserfahrung des Kandidaten abgeleitet werden und darf nicht pauschal auf „Advanced“ gesetzt werden.
+Das Modell soll folgende Logik verwenden:
+Expert = über viele Jahre (ca. 8–10+ Jahre) regelmäßig angewendet, auch in anspruchsvollen Projekten oder internationalen Einsätzen, selbstständiges Arbeiten nach Zeichnung, komplexe Bauteile oder hohe Wandstärken.
+Advanced = solide praktische Erfahrung (ca. 3–8 Jahre), regelmäßig angewendet, selbstständiges Arbeiten möglich, aber nicht zwingend auf höchstem Spezialniveau.
+Intermediate = grundlegende bis mittlere Erfahrung (ca. 1–3 Jahre), unter Anleitung oder in einfacheren Projekten eingesetzt.
+Basic = nur Grundkenntnisse, kurze Einsätze oder nur unterstützende Tätigkeiten.
+
+ANWENDUNG AUF DIE LISTE (Ins Feld `faehigkeiten` abspeichern):
+Format beibehalten (Schlüssel, Beschreibung / Level):
+Handwerkliches Geschick
+Installation
+Demontage
+Blechbearbeitung
+Montieren von Stahlkonstruktionen
+Sägen / Schleifen / Schrauben
+Bohren
+Schweißarbeiten frei Hand
+Schweißarbeiten mit Schweißroboter
+MAG Schweißen
+WIG Schweißen
+
+Für jede dieser Fähigkeiten muss das Niveau individuell bestimmt werden — basierend auf:
+Berufsjahren, Häufigkeit der Anwendung, Projektart (z. B. Schwerstahlbau = höheres Niveau), Schweißverfahren im CV.
+WICHTIG:
+Wenn der Kandidat z. B. 15+ Jahre MAG schweißt -> „Expert“, nicht „Advanced“.
+Wenn WIG nur selten erwähnt wird -> maximal „Intermediate“.
+Wenn Schweißroboter nicht klar erwähnt wird -> „Basic“ oder leer lassen.
+
+ZUSAMMENFASSUNG:
+Ca. 150 Wörter auf Deutsch. Erwähnung von Erfahrung, Branchen, Haupt-Schweißverfahren, Zertifikate.
+Startsatz: „Herr/Frau [Nachname] verfügt über [X] Jahre Berufserfahrung...“
 """,
 
     "Schlosser": """

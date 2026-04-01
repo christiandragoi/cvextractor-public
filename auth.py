@@ -12,6 +12,21 @@ AUTH_CONFIG_FILE = Path(__file__).parent / "auth_config.yaml"
 SETTINGS_FILE = Path(__file__).parent / ".settings.json"
 
 
+def _get_secret(key: str, default: str = "") -> str:
+    """Extremely defensive secret grabber to prevent StreamlitSecretNotFoundError."""
+    try:
+        # Only touch st.secrets if we are relatively sure it won't crash
+        if hasattr(st, "secrets"):
+            # Use direct access inside try to catch the custom Streamlit exception
+            res = st.secrets.get(key)
+            if res is not None:
+                return str(res)
+    except Exception:
+        # This catches StreamlitSecretNotFoundError even if not explicitly imported
+        pass
+    return default
+
+
 def _load_settings() -> dict:
     data = {}
     if SETTINGS_FILE.exists():
@@ -20,11 +35,14 @@ def _load_settings() -> dict:
         except Exception:
             pass
             
-    # Merge st.secrets if running in Streamlit Cloud
+    # Merge st.secrets if running in Streamlit Cloud (only if it doesn't crash)
     try:
-        for k, v in st.secrets.items():
-            if k not in data or not data[k]:
-                data[k] = v
+        if hasattr(st, "secrets"):
+            # Convert to dict safely
+            secrets_dict = dict(st.secrets)
+            for k, v in secrets_dict.items():
+                if k not in data or not data[k]:
+                    data[k] = v
     except Exception:
         pass
         
@@ -141,8 +159,18 @@ def get_google_oauth_url() -> tuple[str, str, str] | tuple[None, None, None]:
     digest = hashlib.sha256(code_verifier.encode('utf-8')).digest()
     code_challenge = base64.urlsafe_b64encode(digest).rstrip(b'=').decode('utf-8')
 
-    # Fallback to the known Streamlit Cloud URL if APP_URL is not set
-    app_url = os.environ.get("APP_URL", st.secrets.get("APP_URL", "https://cv-extractor-app-app-hmenhbqqgjvpqt3dcyzhnu.streamlit.app")).rstrip("/")
+    # Fallback and sanitizer
+    try:
+        raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
+    except Exception:
+        raw_url = ""
+        
+    settings = _load_settings()
+    # The user's correct Streamlit Cloud URL without typos
+    default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
+    
+    # Prioritize settings, then env, then default. Support localhost dynamically if it's set.
+    app_url = (settings.get("app_url", raw_url) or default_url).rstrip("/")
     
     params = {
         "client_id": client_id,
@@ -171,8 +199,14 @@ def exchange_google_code(code: str, code_verifier: str) -> dict | None:
     if not client_id or not client_secret:
         return None
 
-    # Fallback to the known Streamlit Cloud URL if APP_URL is not set
-    app_url = os.environ.get("APP_URL", st.secrets.get("APP_URL", "https://cv-extractor-app-app-hmenhbqqgjvpqt3dcyzhnu.streamlit.app")).rstrip("/")
+    # Fallback and sanitizer
+    try:
+        raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
+    except Exception:
+        raw_url = ""
+
+    default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
+    app_url = (settings.get("app_url", raw_url) or default_url).rstrip("/")
 
     data = {
         "code": code,
