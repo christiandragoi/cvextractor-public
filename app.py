@@ -42,7 +42,7 @@ JOB_PROFILES = [
 AI_PROVIDERS = {
     "OpenAI":    {"models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],              "key_name": "openai_api_key",    "local": False},
     "Gemini":    {"models": ["gemini-1.5-pro", "gemini-1.5-flash", "google/gemini-pro"],               "key_name": "gemini_api_key",    "local": False},
-    "Anthropic": {"models": ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"],                 "key_name": "anthropic_api_key", "local": False},
+    "Anthropic": {"models": ["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"], "key_name": "anthropic_api_key", "local": False},
     "Mistral":   {"models": ["mistral-large-latest", "mistral-small-latest", "open-mistral-7b"],       "key_name": "mistral_api_key",   "local": False},
     "DeepSeek":  {"models": ["deepseek-chat", "deepseek-reasoner"],                                    "key_name": "deepseek_api_key",  "local": False},
     "Grok (xAI)":{"models": ["grok-3", "grok-3-turbo", "grok-3-mini", "grok-2"],                      "key_name": "grok_api_key",      "local": False},
@@ -296,14 +296,37 @@ st.session_state.active_tab = active_tab
 st.sidebar.divider()
 st.sidebar.subheader("🎙️ AI Assistant")
 with st.sidebar.expander("💬 Chat & Voice Commands", expanded=False):
-    # Assistant configuration
+    # Smart default: use Anthropic (Claude) if API key is set, else OpenAI
+    _default_prov_idx = 0
+    if cfg("anthropic_api_key"):
+        _prov_list = list(AI_PROVIDERS.keys())
+        _default_prov_idx = _prov_list.index("Anthropic") if "Anthropic" in _prov_list else 0
+    
     c1, c2 = st.columns(2)
-    chat_provider = c1.selectbox("Provider", list(AI_PROVIDERS.keys()), key="chat_side_prov", index=0)
+    chat_provider = c1.selectbox("Provider", list(AI_PROVIDERS.keys()), key="chat_side_prov", index=_default_prov_idx)
     chat_model = c2.selectbox("Model", AI_PROVIDERS[chat_provider]["models"], key="chat_side_model")
+    
+    # Show model badge
+    _model_badge_color = "#7C3AED" if "claude" in chat_model.lower() else "#2563EB"
+    st.markdown(f'<span style="background:{_model_badge_color};color:white;padding:2px 8px;border-radius:12px;font-size:0.7rem;">🤖 {chat_model}</span>', unsafe_allow_html=True)
     
     st.caption("Choose STT Provider:")
     stt_prov = st.radio("STT", ["OpenAI", "Deepgram", "Eleven Labs"], horizontal=True, key="stt_side_prov", label_visibility="collapsed")
     
+    # ── Quick Actions (Claude-powered smart operations) ──
+    st.markdown("**⚡ Quick Actions**")
+    qa_cols = st.columns(3)
+    quick_action = None
+    with qa_cols[0]:
+        if st.button("📊 Analyze", key="qa_analyze", help="Analyze current candidate's strengths"):
+            quick_action = "Analysiere die Stärken und Schwächen dieses Kandidaten basierend auf seinem CV. Gib 3 Stärken und 2 Verbesserungsvorschläge."
+    with qa_cols[1]:
+        if st.button("✏️ Improve", key="qa_improve", help="Suggest profile improvements"):
+            quick_action = "Verbessere die Zusammenfassung dieses Kandidaten. Mache sie professioneller und überzeugender für einen Personaldienstleister. Antworte auf Deutsch."
+    with qa_cols[2]:
+        if st.button("🌐 Translate", key="qa_translate", help="Translate profile to English"):
+            quick_action = "Translate this candidate's full profile summary, job experience, and skills into professional English. Format it as a clean CV summary."
+
     st.markdown("---")
     
     # 🎤 Microphone Recorder
@@ -342,7 +365,7 @@ with st.sidebar.expander("💬 Chat & Voice Commands", expanded=False):
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = []
     
-    for msg in st.session_state.chat_messages[-5:]: # Show last 5
+    for msg in st.session_state.chat_messages[-6:]: # Show last 6
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
@@ -350,7 +373,9 @@ with st.sidebar.expander("💬 Chat & Voice Commands", expanded=False):
     side_input = st.chat_input("Ask or speak...")
     
     prompt = None
-    if side_input:
+    if quick_action:
+        prompt = quick_action
+    elif side_input:
         prompt = side_input
     elif transcribed_text:
         if "last_side_stt" not in st.session_state or st.session_state.last_side_stt != transcribed_text:
@@ -367,7 +392,15 @@ with st.sidebar.expander("💬 Chat & Voice Commands", expanded=False):
                 try:
                     # Get current candidate context if available
                     cv_ctx, id_ctx = None, None
-                    if "k_select_folder" in st.session_state:
+                    
+                    # Try to get context from the Lebenslauf buffer
+                    ll_buf = st.session_state.get("ll_extract_buffer")
+                    if ll_buf and isinstance(ll_buf, dict) and "data" in ll_buf:
+                        import json as _j
+                        cv_ctx = _j.dumps(ll_buf["data"], ensure_ascii=False, indent=2)
+                    
+                    # Fallback: try candidate folder
+                    if not cv_ctx and "k_select_folder" in st.session_state:
                          from candidates_manager import get_cv_path, get_id_paths
                          cv_p = get_cv_path(st.session_state.k_select_folder)
                          if cv_p: cv_ctx = extract_text_from_any(cv_p)
@@ -1099,6 +1132,68 @@ if active_tab == "📜 Lebenslauf":
                 else:
                     st.success(f"✅ **{res['count']} Variablen** erfolgreich erkannt!")
                     st.code(", ".join(res["tags"]), language="text")
+
+        # ── 🤖 Claude-Powered Deep Template Analysis ──
+        _ai_review_key = cfg("anthropic_api_key") or cfg("openai_api_key")
+        if st.button(
+            "🧠 AI Template Review (Claude)", key="ll_btn_ai_review",
+            use_container_width=True,
+            disabled=(not diag_path or not _ai_review_key),
+            help="Uses Claude AI to deeply analyze your template for potential rendering issues"
+        ):
+            with st.spinner("🧠 Claude is analyzing your template..."):
+                try:
+                    import zipfile, re as _re
+                    with zipfile.ZipFile(diag_path) as z:
+                        xml_content = z.read("word/document.xml").decode("utf-8")
+                    
+                    # Extract just the Jinja-relevant parts (keep it under token limits)
+                    jinja_tags = _re.findall(r'(\{[%{].*?[%}]\})', xml_content, _re.DOTALL)
+                    # Also get text around tags for context
+                    text_content = _re.sub(r'<[^>]+>', '', xml_content)
+                    text_content = _re.sub(r'\s+', ' ', text_content).strip()
+                    
+                    review_prompt = f"""Du bist ein Experte für docxtpl / Jinja2 Word-Templates.
+Analysiere folgende Word-Vorlage und finde potenzielle Probleme:
+
+GEFUNDENE JINJA-TAGS ({len(jinja_tags)} Stück):
+{chr(10).join(jinja_tags[:50])}
+
+VOLLTEXT DER VORLAGE (bereinigt):
+{text_content[:3000]}
+
+Prüfe auf:
+1. ❌ Fehlende {% endif %} oder {% endfor %} (Struktur-Imbalancen)
+2. ❌ Unbekannte Variablen die im Standard-Schema fehlen
+3. ❌ Verschachtelte Loops die Probleme verursachen könnten
+4. ✅ Korrekt verwendete Variablen
+5. 💡 Verbesserungsvorschläge
+
+Antworte mit einer klaren, kurzen Analyse auf Deutsch. Verwende Markdown-Formatierung.
+Beginne mit einer Bewertung: ✅ OK / ⚠️ WARNUNG / ❌ FEHLER"""
+
+                    from chat_assistant import send_chat_message
+                    _review_provider = "Anthropic" if cfg("anthropic_api_key") else "OpenAI"
+                    _review_model = AI_PROVIDERS[_review_provider]["models"][0]
+                    _review_key = cfg(AI_PROVIDERS[_review_provider]["key_name"])
+                    
+                    review_msgs = [
+                        {"role": "system", "content": "Du bist ein Experte für docxtpl Jinja2-Templates in Word-Dokumenten. Analysiere Templates auf Fehler und Verbesserungsmöglichkeiten."},
+                        {"role": "user", "content": review_prompt}
+                    ]
+                    
+                    review_result = send_chat_message(review_msgs, _review_provider, _review_model, _review_key)
+                    
+                    st.markdown("---")
+                    st.markdown(f"**🧠 AI Template Review** (`{_review_model}`)")
+                    st.markdown(review_result)
+                    
+                except Exception as e:
+                    st.error(f"AI Review fehlgeschlagen: {e}")
+        
+        if not _ai_review_key:
+            st.caption("💡 Hinterlege einen Anthropic oder OpenAI API-Key für die AI-Analyse.")
+        
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.divider()
