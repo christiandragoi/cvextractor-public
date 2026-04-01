@@ -159,19 +159,31 @@ def get_google_oauth_url() -> tuple[str, str, str] | tuple[None, None, None]:
     digest = hashlib.sha256(code_verifier.encode('utf-8')).digest()
     code_challenge = base64.urlsafe_b64encode(digest).rstrip(b'=').decode('utf-8')
 
-    # Fallback and sanitizer
+    # Determine redirect URI dynamically.
+    # Priority: Streamlit Cloud hostname > env var APP_URL > saved settings > default
     try:
-        raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
+        import streamlit as st
+        # When running on Streamlit Cloud, server.headless is True and we can detect the host
+        headers = st.context.headers
+        host = headers.get("host", "") if hasattr(headers, "get") else ""
+        if host and "localhost" not in host and "127.0.0.1" not in host:
+            # We're on a real server - build the URL from the host
+            app_url = f"https://{host}"
+        else:
+            raise Exception("localhost")
     except Exception:
-        raw_url = ""
-        
-    settings = _load_settings()
-    # The user's correct Streamlit Cloud URL without typos
-    default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
-    
-    # Prioritize settings, then env, then default. Support localhost dynamically if it's set.
-    app_url = (settings.get("app_url", raw_url) or default_url).rstrip("/")
-    
+        # Fallback chain: env > settings > default
+        try:
+            raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
+        except Exception:
+            raw_url = ""
+        settings = _load_settings()
+        default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
+        app_url = (raw_url or settings.get("app_url", "") or default_url).rstrip("/")
+        # If settings has localhost but we detect we're NOT localhost, use default
+        if "localhost" in app_url:
+            app_url = "http://localhost:8501"  # Keep localhost for local dev
+
     params = {
         "client_id": client_id,
         "redirect_uri": app_url,
@@ -199,14 +211,24 @@ def exchange_google_code(code: str, code_verifier: str) -> dict | None:
     if not client_id or not client_secret:
         return None
 
-    # Fallback and sanitizer
+    # Determine redirect URI dynamically (same logic as get_google_oauth_url)
     try:
-        raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
+        import streamlit as st
+        headers = st.context.headers
+        host = headers.get("host", "") if hasattr(headers, "get") else ""
+        if host and "localhost" not in host and "127.0.0.1" not in host:
+            app_url = f"https://{host}"
+        else:
+            raise Exception("localhost")
     except Exception:
-        raw_url = ""
-
-    default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
-    app_url = (settings.get("app_url", raw_url) or default_url).rstrip("/")
+        try:
+            raw_url = os.environ.get("APP_URL") or _get_secret("APP_URL")
+        except Exception:
+            raw_url = ""
+        default_url = "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
+        app_url = (raw_url or settings.get("app_url", "") or default_url).rstrip("/")
+        if "localhost" in app_url:
+            app_url = "http://localhost:8501"
 
     data = {
         "code": code,
