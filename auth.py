@@ -164,8 +164,8 @@ def _get_redirect_uri() -> str:
     if saved and "localhost" not in saved:
         return saved.rstrip("/")
 
-    # Fallback: default to Streamlit Cloud production if all else fails
-    return "https://cv-extractor-app-app-hmenbqgjvppt3dcyzhnun.streamlit.app"
+    # Fallback: explicitly rely on the VPS domain for production
+    return "https://app.cvextractor.app"
 
 
 def get_google_oauth_url() -> tuple[str, str, str] | tuple[None, None, None]:
