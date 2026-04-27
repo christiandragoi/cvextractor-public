@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CV Extractor</title>
+<style>
+:root{--bg:#f6f7f9;--bg2:#fff;--bg3:#f0f1f3;--txt:#1f2937;--txt2:#6b7280;--border:#e5e7eb;--accent:#4f46e5;--accent2:#4338ca;--success:#16a34a;--danger:#dc2626;--warn:#ca8a04;--r:10px;--rs:8px;--shadow:0 4px 20px rgba(0,0,0,.06)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--txt);line-height:1.45}
+a{color:var(--accent);text-decoration:none}
+.hidden{display:none!important}
+.container{max-width:1100px;margin:0 auto;padding:24px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+h1{font-size:22px;letter-spacing:-.3px}
+.api-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt2)}
+.api-dot{width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block}
+.api-dot.off{background:var(--danger)}
+
+.card{background:var(--bg2);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow);padding:22px;margin-bottom:18px}
+.card-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px}
+.card-t{font-size:16px;font-weight:700}
+.card-sub{font-size:12px;color:var(--txt2);margin-top:2px}
+
+.btn{border:none;border-radius:var(--rs);padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s}
+.btn:hover{opacity:.9;transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn-p{background:var(--accent);color:#fff}
+.btn-s{background:var(--bg3);color:var(--txt)}
+.btn-d{background:var(--danger);color:#fff}
+.btn-g{background:var(--bg3);color:var(--txt2)}
+.btn-sm{padding:6px 10px;font-size:12px}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+.drop-zone{border:2px dashed var(--border);border-radius:var(--r);padding:28px;text-align:center;cursor:pointer;transition:.15s;background:var(--bg)}
+.drop-zone:hover{border-color:var(--accent);background:#eef}
+.drop-zone.has-file{border-color:var(--success);background:#f0fdf4}
+.drop-zone.over{border-color:var(--accent);background:#eef}
+
+.fg{margin-bottom:12px}
+.fl{display:block;font-size:12px;font-weight:600;margin-bottom:5px;color:var(--txt2)}
+input[type=text],input[type=password],input[type=number],textarea,select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--rs);font-size:13px;background:var(--bg2);color:var(--txt)}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+textarea{min-height:100px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:720px){.grid2{grid-template-columns:1fr}}
+
+.result-area{background:var(--bg3);border-radius:var(--rs);padding:14px;margin-top:10px;font-size:12px;overflow-x:auto;max-height:320px;overflow-y:auto}
+.result-area pre{margin:0;white-space:pre-wrap;word-break:break-word}
+
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 12px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--txt2);font-weight:700;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:hover td{background:rgba(0,0,0,.02)}
+.bs{display:inline-block;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.bs-UPLOADED{background:#eef2ff;color:#3730a3}
+.bs-Extracting{background:#fef3c7;color:#92400e}
+.bs-Ready_for_Review{background:#dcfce7;color:#166534}
+.bs-Ready{background:#dcfce7;color:#166534}
+.bs-Ready\ for\ Review{background:#dcfce7;color:#166534}
+.bs-Failed{background:#fee2e2;color:#991b1b}
+.bs-APPROVED{background:#dcfce7;color:#166534}
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+.stat-card{background:var(--bg2);border-radius:var(--r);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow)}
+.stat-lbl{font-size:12px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px}
+.stat-val{font-size:26px;font-weight:800;margin-top:6px;color:var(--accent)}
+.stat-sub{font-size:11px;color:var(--txt2);margin-top:2px}
+
+.toast-ct{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);padding:10px 14px;box-shadow:var(--shadow);font-size:13px;display:flex;align-items:center;gap:8px;animation:slideIn .25s ease}
+.toast.ok{border-left:4px solid var(--success)}
+.toast.er{border-left:4px solid var(--danger)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+.res-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:720px){.res-fields{grid-template-columns:1fr}}
+.res-field{background:var(--bg3);border-radius:var(--rs);padding:10px 12px}
+.res-fl{font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.res-fv{font-size:13px;color:var(--txt)}
+
+.status-msg{padding:10px 14px;border-radius:var(--rs);font-size:13px;margin-top:10px}
+.status-ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.status-er{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.status-warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+
+.progress-bg{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-top:10px}
+.progress-bar{height:100%;background:var(--accent);width:0%;transition:width .4s ease}
+
+.nav{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.nav-item{padding:8px 14px;border-radius:var(--rs);font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg2);color:var(--txt2)}
+.nav-item:hover{border-color:var(--accent);color:var(--accent)}
+.nav-item.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>CV Extractor</h1>
+      <div style="font-size:12px;color:var(--txt2)">Upload, extract, and manage candidate CVs</div>
+    </div>
+    <div class="api-status">
+      <span id="api-dot" class="api-dot off"></span>
+      <span id="api-txt">Checking...</span>
+    </div>
+  </header>
+
+  <div class="nav">
+    <button class="nav-item active" data-page="intake" onclick="nav('intake',this)">CV Intake</button>
+    <button class="nav-item" data-page="extract" onclick="nav('extract',this)">Extraction</button>
+    <button class="nav-item" data-page="candidates" onclick="nav('candidates',this)">Candidates</button>
+    <button class="nav-item" data-page="dashboard" onclick="nav('dashboard',this)">Dashboard</button>
+  </div>
+
+  <!-- INTAKE -->
+  <div id="page-intake">
+    <div class="card">
+      <div class="card-hdr">
+        <div>
+          <div class="card-t">Upload Original CV</div>
+          <div class="card-sub">Upload a PDF or DOCX file to extract candidate data.</div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div>
+          <div class="fg"><label class="fl">AI Model</label><select id="intake-model"><option value="demo">Demo Extractor (No API Key)</option></select></div>
+          <div class="fg"><label class="fl">Instructions / Prompt</label><textarea id="intake-instructions" placeholder="Optional custom extraction instructions..."></textarea></div>
+        </div>
+        <div>
+          <div class="fg"><label class="fl">CV File</label>
+            <div id="icz" class="drop-zone" onclick="document.getElementById('ici').click()" ondragover="this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="cvDrop(event)">
+              <input type="file" id="ici" accept=".pdf,.docx,.doc" style="display:none" onchange="handleIntakeCv(this.files[0])">
+              <div id="ici-idle">
+                <div style="font-size:28px;margin-bottom:6px">📄</div>
+                <div style="font-weight:600;font-size:14px">Click or drop a CV file</div>
+                <div style="font-size:12px;color:var(--txt2);margin-top:4px">PDF, DOCX, or DOC (max 50MB)</div>
+              </div>
+              <div id="ici-active" class="hidden">
+                <div style="font-size:28px;margin-bottom:6px">✅</div>
+                <div id="ic-name" style="font-weight:600;font-size:14px"></div>
+                <div id="ic-size" style="font-size:12px;color:var(--txt2)"></div>
+                <div style="margin-top:8px"><button class="btn btn-s btn-sm" onclick="event.stopPropagation();resetIntakeCv()">Remove</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+        <button class="btn btn-p" id="intake-run" disabled onclick="startIntake()">🚀 Run CV Intake</button>
+        <div id="intake-processing" class="hidden" style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--accent)">Processing...</div>
+          <div class="progress-bg"><div id="intake-bar" class="progress-bar"></div></div>
+        </div>
+      </div>
+      <div id="intake-ok" class="hidden">
+        <div class="status-msg status-ok" style="margin-top:14px">
+          <strong id="intake-title">Candidate created</strong>
+          <div id="intake-sub" style="margin-top:2px;font-size:12px"></div>
+        </div>
+        <div id="intake-fields" class="res-fields" style="margin-top:10px"></div>
+        <div style="margin-top:10px"><button class="btn btn-s btn-sm" id="intake-dl" style="display:none" onclick="dlDocx(intakeCandidateId)">⬇ Download DOCX</button></div>
+        <div class="result-area"><pre id="intake-json"></pre></div>
+      </div>
+      <div id="intake-err" class="hidden">
+        <div class="status-msg status-er" style="margin-top:14px"><strong>Error:</strong> <span id="intake-err-msg"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXTRACTION -->
+  <div id="page-extract" class="hidden">
+    <div class="card">
+      <div class="card-hdr">
+        <div><div class="card-t">Generate Recruiter DOCX</div><div class="card-sub">Select a candidate and template to generate the final document.</div></div>
+      </div>
+      <div class="grid2">
+        <div class="fg"><label class="fl">Candidate</label><select id="extract-candidate"><option value="">Loading...</option></select></div>
+        <div class="fg"><label class="fl">Template</label><select id="extract-template-select"><option value="">No templates available</option></select></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn btn-p" id="extract-run" disabled onclick="startExtraction()">⚙ Generate DOCX</button></div>
+      <div id="extract-status" style="margin-top:10px;font-size:13px;color:var(--txt2)"></div>
+      <div id="extract-ok" class="hidden">
+        <div class="status-msg status-ok" style="margin-top:14px"><strong id="extract-title">Ready</strong><div id="extract-sub" style="margin-top:2px;font-size:12px"></div></div>
+        <div id="extract-fields" class="res-fields" style="margin-top:10px"></div>
+        <div style="margin-top:10px"><button class="btn btn-s btn-sm" id="extract-dl" style="display:none" onclick="dlDocx(extractionId)">⬇ Download DOCX</button></div>
+        <div class="result-area"><pre id="extract-json"></pre></div>
+      </div>
+      <div id="extract-err" class="hidden">
+        <div class="status-msg status-er" style="margin-top:14px"><strong>Error:</strong> <span id="extract-err-msg"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CANDIDATES -->
+  <div id="page-candidates" class="hidden">
+    <div class="card">
+      <div class="card-hdr">
+        <div><div class="card-t">All Candidates</div><div class="card-sub">Click Review to inspect extracted data</div></div>
+        <div style="display:flex;gap:7px;align-items:center">
+          <select id="flt-status" onchange="loadCands()" style="width:auto"><option value="">All</option><option value="UPLOADED">Uploaded</option><option value="Extracting">Extracting</option><option value="Ready for Review">Ready for Review</option><option value="Failed">Failed</option></select>
+          <button class="btn btn-d btn-sm" onclick="deleteAllCands()">Delete All</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Nationality</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="cand-rows"><tr><td colspan="5" style="text-align:center;color:var(--txt2);padding:28px">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="page-dashboard" class="hidden">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-lbl">Total</div><div class="stat-val" id="s-total">—</div><div class="stat-sub">All candidates</div></div>
+      <div class="stat-card"><div class="stat-lbl">Review</div><div class="stat-val" id="s-review">—</div><div class="stat-sub">Pending</div></div>
+      <div class="stat-card"><div class="stat-lbl">Completed</div><div class="stat-val" id="s-done">—</div><div class="stat-sub">Ready for Review</div></div>
+      <div class="stat-card"><div class="stat-lbl">Failed</div><div class="stat-val" id="s-fail">—</div><div class="stat-sub">Errors</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="card-t">Recent Candidates</span><button class="btn btn-p btn-sm" onclick="nav('intake',null)">+ New Extraction</button></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>File</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="dash-rows"><tr><td colspan="5" style="text-align:center;color:var(--txt2);padding:28px">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-ct" id="toasts"></div>
+
+<script>
+const API='/api/v1';let allCands=[],intakeFile=null,intakeCandidateId=null,extractionId=null;
+
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function fmtD(s){try{return new Date(s).toLocaleDateString('de-DE')}catch{return s||'—'}}
+function nav(pg,el){document.querySelectorAll('[id^="page-"]').forEach(p=>p.classList.add('hidden'));const p=document.getElementById('page-'+pg);if(p)p.classList.remove('hidden');document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));if(el)el.classList.add('active');else document.querySelector(`[data-page="${pg}"]`)?.classList.add('active');if(pg==='candidates')loadCands();if(pg==='dashboard')loadDash();if(pg==='extract')loadExtractionSetup();}
+function toast(m,t='ok'){const e=document.createElement('div');e.className='toast '+(t==='ok'?'ok':'er');e.innerHTML=`<span>${t==='ok'?'✓':'✗'}</span><span>${esc(m)}</span>`;document.getElementById('toasts').appendChild(e);setTimeout(()=>e.remove(),4000)}
+
+async function req(u,o={}){const r=await fetch(API+u,{headers:{'Content-Type':'application/json'},...o});if(!r.ok){let e={};try{e=await r.json()}catch{e={detail:await r.text()||`HTTP ${r.status}`}}throw new Error(typeof e.detail==='object'?(e.detail.error||JSON.stringify(e.detail)):(e.detail||e.message||`HTTP ${r.status}`))}return r.json()}
+
+function handleIntakeCv(f){if(!f)return;intakeFile={name:f.name,size:(f.size/1024).toFixed(0)+' KB',_raw:f};document.getElementById('ic-name').textContent=f.name;document.getElementById('ic-size').textContent=intakeFile.size;document.getElementById('ici-idle').classList.add('hidden');document.getElementById('ici-active').classList.remove('hidden');document.getElementById('icz').classList.add('has-file');document.getElementById('intake-run').disabled=false;}
+function resetIntakeCv(){intakeFile=null;document.getElementById('ici-idle').classList.remove('hidden');document.getElementById('ici-active').classList.add('hidden');document.getElementById('icz').classList.remove('has-file');document.getElementById('ici').value='';document.getElementById('intake-run').disabled=true;}
+function cvDrop(e){e.preventDefault();document.getElementById('icz').classList.remove('over');const f=e.dataTransfer.files[0];if(f)handleIntakeCv(f);}
+
+async function startIntake(){
+  if(!intakeFile)return toast('Upload a CV first','er');
+  const btn=document.getElementById('intake-run');btn.disabled=true;
+  document.getElementById('intake-ok').classList.add('hidden');
+  document.getElementById('intake-err').classList.add('hidden');
+  document.getElementById('intake-processing').classList.remove('hidden');
+  let pct=15;const barIv=setInterval(()=>{pct=Math.min(pct+3,90);document.getElementById('intake-bar').style.width=pct+'%'},800);
+  const fd=new FormData();
+  fd.append('cv_file',intakeFile._raw);
+  fd.append('ai_model',document.getElementById('intake-model').value);
+  fd.append('master_prompt',document.getElementById('intake-instructions').value);
+  try{
+    const resp=await fetch('/api/intake/process',{method:'POST',body:fd});
+    const payload=await resp.json().catch(()=>null);
+    clearInterval(barIv);document.getElementById('intake-bar').style.width='100%';
+    if(!resp.ok){const msg=payload?.detail?.error?.message||payload?.error?.message||payload?.detail?.message||payload?.detail||'CV intake failed';throw new Error(typeof msg==='object'?JSON.stringify(msg):msg);}
+    intakeCandidateId=payload.candidate_id;
+    document.getElementById('intake-processing').classList.add('hidden');
+    document.getElementById('intake-ok').classList.remove('hidden');
+    document.getElementById('intake-dl').style.display='inline-flex';
+    document.getElementById('intake-title').textContent=payload.full_name||'Candidate created';
+    document.getElementById('intake-sub').textContent='Structured data saved. Status: '+payload.status;
+    document.getElementById('intake-fields').innerHTML=buildResultFields(payload.data||{});
+    document.getElementById('intake-json').textContent=JSON.stringify(payload.data,null,2);
+    loadDash();loadCands();
+    toast('CV Intake complete');
+  }catch(e){
+    clearInterval(barIv);document.getElementById('intake-processing').classList.add('hidden');
+    document.getElementById('intake-err').classList.remove('hidden');document.getElementById('intake-err-msg').textContent=e.message;
+    toast(e.message,'er');
+  }finally{btn.disabled=false;}
+}
+
+function buildResultFields(d){
+  const empList=d.employment_history||[];
+  let html=`<div class="res-field" style="grid-column:span 2"><div class="res-fl">Personal Information</div><div class="res-fv"><strong>${esc(d.full_name||d.candidate?.full_name||'Unknown')}</strong>${d.nationality?` · ${esc(d.nationality)}`:''}${d.email?`<br>${esc(d.email)}`:''}${d.phone?`<br>${esc(d.phone)}`:''}</div></div>`;
+  if(empList.length){
+    html+=`<div class="res-field" style="grid-column:span 2"><div class="res-fl">Employment History</div><div class="res-fv">${empList.map(e=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><strong>${esc(e.job_title||e.position||'?')}</strong><br>${esc(e.company||e.employer||'?')}<br><span style="color:var(--txt2);font-size:11px">${esc(e.start_date||'?')} to ${esc(e.end_date||'?')}</span></div>`).join('')}</div></div>`;
+  }
+  if((d.skills||[]).length){
+    html+=`<div class="res-field" style="grid-column:span 2"><div class="res-fl">Skills</div><div class="res-fv">${(d.skills||[]).slice(0,20).map(s=>esc(s)).join(', ')}</div></div>`;
+  }
+  if((d.languages||[]).length){
+    html+=`<div class="res-field" style="grid-column:span 2"><div class="res-fl">Languages</div><div class="res-fv">${(d.languages||[]).map(l=>esc(l)).join(', ')}</div></div>`;
+  }
+  return html;
+}
+
+async function loadExtractionSetup(){
+  try{
+    const data=await req('/candidates');
+    allCands=Array.isArray(data)?data:[];
+    const select=document.getElementById('extract-candidate');
+    select.innerHTML='<option value="">Select candidate...</option>'+allCands.map(c=>`<option value="${c.id}">${esc(c.full_name||c.original_filename||'Unknown')}</option>`).join('');
+    select.onchange=()=>{const ready=!!select.value;document.getElementById('extract-run').disabled=!ready;};
+  }catch{}
+}
+
+async function startExtraction(){
+  const cid=document.getElementById('extract-candidate').value;
+  if(!cid)return toast('Select a candidate first','er');
+  document.getElementById('extract-ok').classList.add('hidden');
+  document.getElementById('extract-err').classList.add('hidden');
+  document.getElementById('extract-status').textContent='Generating recruiter DOCX...';
+  try{
+    const fd=new FormData();
+    fd.append('candidate_id',cid);
+    const resp=await fetch('/api/process',{method:'POST',body:fd});
+    const payload=await resp.json().catch(()=>null);
+    if(!resp.ok){const msg=payload?.detail?.error?.message||payload?.error?.message||payload?.detail?.message||payload?.detail||'Processing failed';throw new Error(typeof msg==='object'?JSON.stringify(msg):msg);}
+    extractionId=payload.candidate_id;
+    document.getElementById('extract-ok').classList.remove('hidden');
+    document.getElementById('extract-dl').style.display='inline-flex';
+    document.getElementById('extract-title').textContent=payload.full_name||'Ready for Review';
+    document.getElementById('extract-sub').textContent='Final recruiter DOCX generated successfully.';
+    document.getElementById('extract-fields').innerHTML=buildResultFields(payload.data||{});
+    document.getElementById('extract-json').textContent=JSON.stringify(payload.data,null,2);
+    document.getElementById('extract-status').textContent='Completed.';
+    loadDash();loadCands();
+    toast('Extraction workflow complete');
+  }catch(e){
+    document.getElementById('extract-err').classList.remove('hidden');
+    document.getElementById('extract-err-msg').textContent=e.message;
+    document.getElementById('extract-status').textContent=e.message;
+    toast(e.message,'er');
+  }
+}
+
+function dlDocx(candidateId){if(!candidateId){toast('No DOCX available','er');return;}window.open(`/api/download/${candidateId}`,'_blank');}
+
+async function loadCands(){try{let d=await req('/candidates');allCands=Array.isArray(d)?d:[];const f=document.getElementById('flt-status')?.value||'';const l=f?allCands.filter(c=>c.status===f):allCands;document.getElementById('cand-rows').innerHTML=l.length?l.map(c=>`<tr><td><strong>${esc(c.full_name||'Unknown')}</strong></td><td>${esc(c.nationality||'—')}</td><td><span class="bs bs-${c.status.replace(/ /g,'_')}">${c.status}</span></td><td style="color:var(--txt2)">${fmtD(c.created_at)}</td><td><button class="btn btn-s btn-sm" onclick="viewCand('${c.id}')">View</button></td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--txt2);padding:28px">No candidates</td></tr>';}catch{toast('Failed to load candidates','er')}}
+
+function viewCand(id){const c=allCands.find(x=>x.id===id)||{};alert(`Candidate: ${c.full_name||'Unknown'}\nStatus: ${c.status||'—'}\nFile: ${c.original_filename||'—'}\nEmail: ${c.email||'—'}\nPhone: ${c.phone||'—'}\nNationality: ${c.nationality||'—'}\nDOB: ${c.date_of_birth||'—'}`);}
+
+async function loadDash(){try{const d=await req('/candidates');allCands=Array.isArray(d)?d:[];document.getElementById('s-total').textContent=allCands.length;document.getElementById('s-review').textContent=allCands.filter(c=>c.needs_review).length;document.getElementById('s-done').textContent=allCands.filter(c=>c.status==='Ready for Review').length;document.getElementById('s-fail').textContent=allCands.filter(c=>c.status==='Failed').length;const rows=allCands.slice(0,8);document.getElementById('dash-rows').innerHTML=rows.length?rows.map(c=>`<tr><td><strong>${esc(c.full_name||'Unknown')}</strong></td><td style="color:var(--txt2);font-size:11px">${esc(c.original_filename)}</td><td><span class="bs bs-${c.status.replace(/ /g,'_')}">${c.status}</span></td><td style="color:var(--txt2)">${fmtD(c.created_at)}</td><td><button class="btn btn-s btn-sm" onclick="viewCand('${c.id}')">View</button></td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--txt2);padding:28px">No candidates yet</td></tr>';}catch{}}
+
+async function deleteAllCands(){if(!confirm('Delete ALL candidates? This cannot be undone.'))return;try{await req('/candidates',{method:'DELETE'});toast('Cleared all candidates');loadDash();loadCands();}catch{toast('Failed to clear','er')}}
+
+async function checkHealth(){try{const h=await fetch('/api/v1/health').then(r=>r.json());document.getElementById('api-dot').className='api-dot';document.getElementById('api-txt').textContent='API v'+h.version}catch{document.getElementById('api-dot').className='api-dot off';document.getElementById('api-txt').textContent='Offline'}}
+
+async function loadModelOptions(){try{const d=await req('/settings/providers');const providers=Array.isArray(d)?d:[];const el=document.getElementById('intake-model');const active=providers.filter(p=>p.is_active);el.innerHTML=active.map(p=>`<option value="${p.model_selected||'demo'}">${esc(p.display_name)}</option>`).join('');if(!el.options.length)el.innerHTML='<option value="demo">Demo Extractor (No API Key)</option>';}catch{}}
+
+checkHealth();setInterval(checkHealth,30000);loadDash();loadCands();loadModelOptions();nav('intake',null);
+</script>
+</body>
+</html>
